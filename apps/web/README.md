@@ -19,6 +19,9 @@ The browser never calls the engine and never sees a token or site key.
   phone sign-in, phone invites and free weeks when the engine runs with `SMS_DRIVER=none`.
 - **Signed out:** visiting any `/app` page without a session goes to `/sign-in?next=<that page>`,
   and back there after signing in.
+- **Behind a proxy (GitHub Codespaces):** forms need the browser's address allowed with
+  `SERVER_ACTIONS_ALLOWED_ORIGINS` (the Codespace setup in `.devcontainer/` sets it; leave it unset in
+  production). Redirects are relative, so they work whatever address the browser uses.
 - **Lost sessions:** if the engine says a session ended (`must()` sees `session_ended`,
   `token_invalid` and similar), the person is sent to `/sign-in`.
 - **Rate limits:** the person's IP is passed on as `X-Forwarded-For`, so the engine's rate limits

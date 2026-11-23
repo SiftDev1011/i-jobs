@@ -53,11 +53,12 @@ function isAppPage(req: NextRequest) {
 }
 
 function toSignIn(req: NextRequest) {
+  // A rewrite to a page that redirects: middleware redirects must be absolute, and behind proxies
+  // (GitHub Codespaces) the app's own host is localhost. A page's redirect stays relative.
   const url = req.nextUrl.clone();
-  const next = req.nextUrl.pathname + req.nextUrl.search;
-  url.pathname = '/sign-in';
-  url.search = `?next=${encodeURIComponent(next)}`;
-  return NextResponse.redirect(url);
+  url.pathname = '/sign-in/go';
+  url.search = `?next=${encodeURIComponent(req.nextUrl.pathname + req.nextUrl.search)}`;
+  return NextResponse.rewrite(url);
 }
 
 function ipOf(req: NextRequest) {

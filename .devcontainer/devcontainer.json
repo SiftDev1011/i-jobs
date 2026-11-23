@@ -1,0 +1,19 @@
+{
+  // GitHub Codespaces (or VS Code dev containers): Node 22, Docker for Postgres and Redis,
+  // psql and pdftotext. Then follow Step 2 of the setup guide from 2a's `docker run` lines.
+  "name": "i-jobs",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "hostRequirements": { "cpus": 2, "memory": "8gb" },
+  "containerEnv": {
+    "SERVER_ACTIONS_ALLOWED_ORIGINS": "*.app.github.dev,localhost:3001"
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y postgresql-client poppler-utils && npm ci --no-audit --no-fund",
+  "forwardPorts": [3001, 3000],
+  "portsAttributes": {
+    "3001": { "label": "i-jobs web app", "onAutoForward": "openBrowser" },
+    "3000": { "label": "engine API", "onAutoForward": "silent" }
+  }
+}
