@@ -7,40 +7,44 @@ import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import { engine, must } from '@/lib/engine';
 import { ACCESS_COOKIE, REFRESH_COOKIE } from '@/lib/session';
+import { FilterPanel } from './filter-panel';
+import { activeCount, CATEGORIES, jobsHref, PAY, readFilters, TYPES, type Filters } from './filters';
 import s from './jobs.module.css';
 
 export const metadata: Metadata = { title: 'Remote jobs' };
 
-const TYPES = [['full_time', 'Full time'], ['part_time', 'Part time'], ['contract', 'Contract'], ['freelance', 'Freelance'], ['internship', 'Internship'], ['graduate', 'Graduate']] as const;
-const CATEGORIES = [['customer-support', 'Customer support'], ['design', 'Design'], ['data', 'Data'], ['writing', 'Writing'], ['engineering', 'Engineering'], ['sales', 'Sales']] as const;
-type Search = { q?: string; type?: string; category?: string; verified?: string; worldwide?: string; cursor?: string };
+type Search = Record<string, string | string[] | undefined>;
 
 export default async function Jobs({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
   const jar = await cookies();
   const signedIn = !!(jar.get(ACCESS_COOKIE) || jar.get(REFRESH_COOKIE));
-  const q = sp.q?.trim().slice(0, 120) || undefined;
-  const type = TYPES.find(([k]) => k === sp.type)?.[0];
-  const category = CATEGORIES.find(([k]) => k === sp.category)?.[0];
-
+  const f = readFilters(sp);
+  const q = f.q;
+  const pay = PAY.find(([k]) => k === f.pay);
+  const cursor = typeof sp.cursor === 'string' ? sp.cursor : undefined;
   let page: { items?: Parameters<typeof JobCard>[0]['job'][]; next_cursor?: string | null } = {};
   let failed = false;
   try {
     const api = await engine();
     page = must(await api.GET('/jobs', {
-      params: { query: { q, employment_type: type ? [type] : undefined, category, verified_only: sp.verified === '1' || undefined, location: sp.worldwide === '1' ? ['worldwide'] : undefined, cursor: sp.cursor, limit: 24 } },
+      params: { query: {
+        q, employment_type: f.types.length ? f.types : undefined, category: f.category, verified_only: f.verified || undefined,
+        location: f.worldwide ? ['worldwide'] : undefined, ...(pay ? { min_pay_monthly: pay[3], currency: pay[2] } : {}), cursor, limit: 24,
+      } },
     }));
   } catch {
     failed = true;
   }
 
-  const link = (patch: Partial<Search>) => {
-    const p = new URLSearchParams();
-    const merged = { ...sp, cursor: undefined, ...patch };
-    for (const [k, v] of Object.entries(merged)) if (v) p.set(k, String(v));
-    const qs = p.toString();
-    return `/jobs${qs ? `?${qs}` : ''}`;
-  };
+  // Each active filter as a tag whose × removes just that one.
+  const tags: { label: string; without: Filters }[] = [
+    ...(f.category ? [{ label: CATEGORIES.find(([k]) => k === f.category)![1], without: { ...f, category: undefined } }] : []),
+    ...f.types.map((t) => ({ label: TYPES.find(([k]) => k === t)![1], without: { ...f, types: f.types.filter((x) => x !== t) } })),
+    ...(pay ? [{ label: `${pay[1]}+ a month`, without: { ...f, pay: undefined } }] : []),
+    ...(f.worldwide ? [{ label: 'Open to anyone, anywhere', without: { ...f, worldwide: false } }] : []),
+    ...(f.verified ? [{ label: 'Verified employers', without: { ...f, verified: false } }] : []),
+  ];
   const items = page.items ?? [];
 
   return (
@@ -49,24 +53,29 @@ export default async function Jobs({ searchParams }: { searchParams: Promise<Sea
       <main className="wrap">
         <header className={s.head}>
           <h1 className={s.h}>{q ? <>Jobs for &ldquo;{q}&rdquo;</> : 'Remote jobs you can actually get'}</h1>
-          <form className={s.search} role="search" action="/jobs">
-            <input className="input" type="search" name="q" defaultValue={q} placeholder="Search a role, skill or company" aria-label="Search jobs" />
-            {type && <input type="hidden" name="type" value={type} />}
-            {category && <input type="hidden" name="category" value={category} />}
-            <button className="btn btn-green">Search</button>
-          </form>
-          <div className={s.filters} aria-label="Filters">
-            {CATEGORIES.map(([k, label]) => (
-              <Link key={k} href={link({ category: category === k ? undefined : k })} className={`${s.chip} ${category === k ? s.on : ''}`} aria-pressed={category === k}>{label}</Link>
-            ))}
-            <span className={s.sep} aria-hidden="true" />
-            {TYPES.map(([k, label]) => (
-              <Link key={k} href={link({ type: type === k ? undefined : k })} className={`${s.chip} ${type === k ? s.on : ''}`} aria-pressed={type === k}>{label}</Link>
-            ))}
-            <span className={s.sep} aria-hidden="true" />
-            <Link href={link({ worldwide: sp.worldwide === '1' ? undefined : '1' })} className={`${s.chip} ${sp.worldwide === '1' ? s.on : ''}`}>Worldwide only</Link>
-            <Link href={link({ verified: sp.verified === '1' ? undefined : '1' })} className={`${s.chip} ${sp.verified === '1' ? s.on : ''}`}>Verified employers</Link>
+          <div className={s.searchRow}>
+            <form className={s.search} role="search" action="/jobs">
+              <input className="input" type="search" name="q" defaultValue={q} placeholder="Search a role, skill or company" aria-label="Search jobs" />
+              {f.category && <input type="hidden" name="category" value={f.category} />}
+              {f.types.map((t) => <input key={t} type="hidden" name="type" value={t} />)}
+              {f.worldwide && <input type="hidden" name="worldwide" value="1" />}
+              {f.verified && <input type="hidden" name="verified" value="1" />}
+              {f.pay && <input type="hidden" name="pay" value={f.pay} />}
+              <button className={`btn btn-green ${s.searchBtn}`}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+                <span>Search</span>
+              </button>
+            </form>
+            <FilterPanel f={f} count={activeCount(f)} />
           </div>
+          {tags.length > 0 && (
+            <ul className={s.tags} aria-label="Filters on">
+              {tags.map((t) => (
+                <li key={t.label}><Link href={jobsHref(t.without)} className={s.tag} aria-label={`Remove ${t.label}`}>{t.label} <span aria-hidden="true">×</span></Link></li>
+              ))}
+              {tags.length > 1 && <li><Link href={jobsHref({ q, types: [], worldwide: false, verified: false })} className={s.clear}>Clear all</Link></li>}
+            </ul>
+          )}
         </header>
 
         {failed ? (
@@ -77,7 +86,7 @@ export default async function Jobs({ searchParams }: { searchParams: Promise<Sea
           <div className={s.grid}>{items.map((j) => <JobCard key={j.id} job={j} />)}</div>
         )}
         {page.next_cursor && (
-          <p className={s.more}><Link className="btn btn-line" href={link({ cursor: page.next_cursor })}>More jobs</Link></p>
+          <p className={s.more}><Link className="btn btn-line" href={jobsHref(f, page.next_cursor)}>More jobs</Link></p>
         )}
         {!signedIn && (
           <aside className={s.cta}>

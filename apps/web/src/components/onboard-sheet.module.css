@@ -1,12 +1,15 @@
-.sheet{position:fixed;inset:0;z-index:50;background:rgba(15,15,15,.4);display:grid;place-items:center;padding:max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
-.panel{width:min(460px, 100%);max-height:100%;overflow:auto;background:var(--white);border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 16px 48px rgba(0,0,0,.18)}
+.sheet{position:fixed;inset:0;z-index:50;background:rgba(15,15,15,.4);display:grid;place-items:center;animation:ij-fade .22s ease both;padding:max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
+.panel{width:min(460px, 100%);max-height:100%;overflow:auto;background:var(--white);border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 16px 48px rgba(0,0,0,.18);animation:ij-sheet-in .3s var(--ease) both}
+@keyframes ij-sheet-in{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
 .panel-head{display:flex;justify-content:space-between;align-items:center}
 .panel h2{font-size:22px;letter-spacing:-0.02em}
-.x{width:32px;height:32px;border-radius:6px;border:none;background:transparent;display:grid;place-items:center;color:var(--mute)}
+.x{width:32px;height:32px;border-radius:6px;border:none;background:transparent;display:grid;place-items:center;color:var(--mute);transition:background-color .15s ease, color .15s ease, transform .2s var(--ease)}
+.x:hover{color:var(--ink);transform:rotate(90deg)}
 .x:hover{background:var(--chip)}
 .x svg{width:16px;height:16px}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
-.tabs button{border:none;background:transparent;padding:8px 10px;margin-bottom:-1px;font-weight:500;font-size:14px;color:var(--mute);border-bottom:2px solid transparent}
+.tabs button{border:none;background:transparent;padding:8px 10px;margin-bottom:-1px;font-weight:500;font-size:14px;color:var(--mute);border-bottom:2px solid transparent;transition:color .18s ease, border-color .18s ease}
+.tabs button:hover{color:var(--ink)}
 .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
 .panel label{font-size:14px;font-weight:500}
 .code-input{font-weight:600;letter-spacing:.06em;text-transform:uppercase}
@@ -17,7 +20,8 @@
 .citem h4{margin:0;font-size:14px;font-weight:600}
 .citem .meta{font-size:12px;color:var(--mute)}
 .citem button{flex:none}
-.req{border:1px solid var(--line-2);background:var(--white);border-radius:6px;padding:5px 10px;font-weight:500;font-size:13px}
+.req{border:1px solid var(--line-2);background:var(--white);border-radius:6px;padding:5px 10px;font-weight:500;font-size:13px;transition:background-color .18s ease, color .18s ease, border-color .18s ease, transform .18s var(--ease)}
+.req:active{transform:scale(.96)}
 .req[aria-pressed="true"]{background:var(--tag-green-bg);color:var(--tag-green);border-color:transparent}
 .login{font-size:14px;text-align:center;color:var(--mute)}
 .login a{color:var(--action-ink);font-weight:500}

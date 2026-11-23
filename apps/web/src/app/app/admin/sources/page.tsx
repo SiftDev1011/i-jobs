@@ -17,7 +17,7 @@ export default async function Sources() {
           return (
             <li key={s.key}>
               <details className={u.card}>
-                <summary style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <summary style={{ justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                   <span><b>{s.name}</b> <span className={u.muted}>· {s.kind} · {s.key}</span></span>
                   <span className={u.row} style={{ gap: 8 }}>
                     <span className={u.muted}>{h.jobs_live ?? 0} live · last run {h.last_run_at ? dateLabel(h.last_run_at, true) : 'never'}</span>

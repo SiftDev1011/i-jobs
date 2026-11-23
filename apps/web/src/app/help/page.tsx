@@ -30,7 +30,7 @@ export default async function HelpCentre({ searchParams }: { searchParams: Promi
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {hits.map((h, i) => (
               <details key={i} open={i === 0} style={{ border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px' }}>
-                <summary style={{ fontWeight: 600, cursor: 'pointer' }}>{h.question}</summary>
+                <summary className="sum-wide" style={{ fontWeight: 600 }}>{h.question}</summary>
                 <p style={{ color: 'var(--ink-2)', marginTop: 10, whiteSpace: 'pre-wrap' }}>{h.answer}</p>
               </details>
             ))}

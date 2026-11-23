@@ -30,6 +30,7 @@
   .tabs{display:grid;grid-template-columns:repeat(5, 1fr);position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:6px max(4px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(4px, env(safe-area-inset-left, 0px))}
   .tab{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:500;color:var(--mute);border:none;background:transparent;padding:4px 0}
   .tab.on{color:var(--action)}
-  .moreSheet{display:block;position:fixed;inset:0;z-index:25;background:rgba(15,15,15,.3)}
-  .morePanel{position:absolute;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom, 0px));background:var(--white);border-radius:16px 16px 0 0;padding:12px 12px 16px;display:flex;flex-direction:column;gap:2px;box-shadow:0 -12px 32px rgba(0,0,0,.12)}
+  .moreSheet{display:block;position:fixed;inset:0;z-index:25;background:rgba(15,15,15,.3);animation:ij-fade .2s ease both}
+  .morePanel{position:absolute;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom, 0px));background:var(--white);border-radius:16px 16px 0 0;padding:12px 12px 16px;display:flex;flex-direction:column;gap:2px;box-shadow:0 -12px 32px rgba(0,0,0,.12);animation:ij-more-up .3s var(--ease) both}
+  @keyframes ij-more-up{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
 }

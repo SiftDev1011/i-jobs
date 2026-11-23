@@ -35,7 +35,7 @@ export default async function ReviewQueue({ searchParams }: { searchParams: Prom
       </div>
 
       <details className={u.card}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Take down a live job</summary>
+        <summary className="sum-wide" style={{ fontWeight: 600 }}>Take down a live job</summary>
         <TakedownForm />
       </details>
 

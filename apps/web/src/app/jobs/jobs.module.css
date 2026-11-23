@@ -1,12 +1,62 @@
 .head{padding-block:40px 24px;display:flex;flex-direction:column;gap:16px}
 .h{font-size:clamp(28px, 4vw, 44px);line-height:1.1}
-.search{display:flex;gap:8px;max-width:640px}
-.search :global(.input){margin-top:0}
-.filters{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.chip{font-size:13.5px;font-weight:500;padding:5px 11px;border-radius:999px;border:1px solid var(--line-2);color:var(--ink-2);background:var(--white);white-space:nowrap}
-.chip:hover{border-color:var(--ink-2)}
-.on{background:var(--ink);border-color:var(--ink);color:var(--white)}
-.sep{width:1px;height:18px;background:var(--line-2);margin:0 4px}
+.searchRow{display:flex;gap:8px;align-items:stretch;max-width:760px}
+.search{display:flex;gap:8px;flex:1;min-width:0}
+.search :global(.input){margin-top:0;min-width:0}
+.searchBtn{display:inline-flex;align-items:center;gap:8px}
+.searchBtn svg{display:none}
+.filterBtn{display:inline-flex;align-items:center;gap:8px;padding:0 16px;border-radius:10px;border:1px solid var(--line-2);background:var(--white);color:var(--ink);font-weight:500;font-size:15px;white-space:nowrap;cursor:pointer;transition:border-color .18s ease, background-color .18s ease, transform .18s var(--ease)}
+.filterBtn:active{transform:scale(.97)}
+.filterBtn svg{transition:transform .3s var(--ease)}
+.filterBtn:hover svg{transform:rotate(-8deg)}
+.filterBtn:hover{border-color:var(--ink-2)}
+.filterBtn[aria-expanded="true"]{border-color:var(--ink)}
+.count{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--ink);color:var(--white);font-size:12px;display:grid;place-items:center;animation:ij-pop .35s var(--ease) both}
+.tags{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tag{display:inline-flex;gap:6px;align-items:center;font-size:13.5px;font-weight:500;padding:5px 10px 5px 12px;border-radius:999px;background:var(--ink);color:var(--white);transition:background-color .18s ease, transform .18s var(--ease);animation:ij-in .25s var(--ease) both}
+.tag:hover{background:#3a3a38}
+.tag:active{transform:scale(.96)}
+.tags li:nth-child(2) .tag{animation-delay:.03s}
+.tags li:nth-child(3) .tag{animation-delay:.06s}
+.tags li:nth-child(4) .tag{animation-delay:.09s}
+.tag span{opacity:.75;font-size:15px;line-height:1;transition:opacity .15s ease, transform .2s var(--ease)}
+.tag:hover span{transform:rotate(90deg)}
+.tag:hover span{opacity:1}
+.clear{font-size:13.5px;font-weight:500;color:var(--ink-2);text-decoration:underline;padding:5px 6px}
+/* The filter panel: from the right on a computer, from the bottom on a phone. */
+.scrim{position:fixed;inset:0;z-index:60;background:rgba(15,15,15,.4);display:flex;justify-content:flex-end;animation:ij-fade .22s ease both}
+@keyframes ij-from-right{from{transform:translateX(32px);opacity:0}to{transform:none;opacity:1}}
+@keyframes ij-from-bottom{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.drawer{width:min(420px, 100%);height:100%;background:var(--white);display:flex;flex-direction:column;box-shadow:-16px 0 48px rgba(0,0,0,.14);padding-top:env(safe-area-inset-top, 0px);animation:ij-from-right .32s var(--ease) both}
+.drawerHead{display:flex;justify-content:space-between;align-items:center;padding:20px 24px 12px;border-bottom:1px solid var(--line)}
+.drawerHead h2{font-size:20px;letter-spacing:-0.02em;outline:none}
+.x{width:32px;height:32px;border-radius:6px;border:none;background:transparent;display:grid;place-items:center;color:var(--mute);cursor:pointer;transition:background-color .15s ease, color .15s ease, transform .2s var(--ease)}
+.x:hover{color:var(--ink);transform:rotate(90deg)}
+.x:hover{background:var(--chip)}
+.drawerBody{flex:1;overflow:auto;padding:8px 24px 24px;display:flex;flex-direction:column}
+.group{border:0;margin:0;padding:16px 0;border-bottom:1px solid var(--line);min-width:0}
+.group:last-child{border-bottom:0}
+.group legend{float:left;width:100%;font-size:15px;font-weight:600;padding:0;margin-bottom:6px}
+.group legend + *{clear:both}
+.group > .opt{display:flex}
+.opts{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:4px 16px}
+.opt{display:flex;gap:10px;align-items:center;font-size:14.5px;color:var(--ink-2);padding:6px 0;cursor:pointer;transition:color .15s ease}
+.opt:hover,.opt:has(input:checked){color:var(--ink)}
+.opt input{width:18px;height:18px;accent-color:var(--ink);margin:0;flex:none}
+.note{font-size:12.5px;color:var(--mute);margin-top:4px}
+.drawerFoot{display:flex;gap:10px;justify-content:space-between;padding:14px 24px max(14px, env(safe-area-inset-bottom, 0px));border-top:1px solid var(--line);background:var(--white)}
+.drawerFoot > *{flex:1;justify-content:center}
+@media (max-width:640px){
+  .filterBtn{padding:0 12px}
+  .searchBtn{padding-inline:14px}
+  .searchBtn svg{display:block}
+  .searchBtn span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .scrim{align-items:flex-end}
+  .drawer{width:100%;height:auto;max-height:88vh;border-radius:16px 16px 0 0;box-shadow:0 -16px 48px rgba(0,0,0,.14);animation-name:ij-from-bottom}
+  .drawerHead{padding:16px 20px 10px}
+  .drawerBody{padding:4px 20px 16px}
+  .drawerFoot{padding:12px 20px max(12px, env(safe-area-inset-bottom, 0px))}
+}
 .grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:16px}
 .empty{padding:48px 0;color:var(--ink-2)}
 .more{display:flex;justify-content:center;padding:32px 0}
