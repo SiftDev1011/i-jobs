@@ -1,0 +1,17 @@
+.main{display:grid;place-items:center;padding-block:48px 96px}
+.card{width:min(480px, 100%);border:1px solid var(--line);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px;background:var(--white);box-shadow:0 1px 2px rgba(0,0,0,.04), 0 18px 48px rgba(0,0,0,.06)}
+.top{display:flex;align-items:center;gap:14px}
+.tile{width:48px;height:48px;border-radius:12px;font-size:16px}
+.id{flex:1;min-width:0}
+.id h1{font-size:22px;letter-spacing:-0.02em;line-height:1.2}
+.id p{font-size:14px;color:var(--mute)}
+.desc{color:var(--ink-2)}
+.facts{margin:0;padding-block:12px;border-block:1px solid var(--line);display:flex;flex-direction:column;gap:8px;font-size:14.5px}
+.facts div{display:flex;justify-content:space-between;gap:12px}
+.facts dt{color:var(--mute)}
+.facts dd{margin:0;font-weight:600;text-align:right}
+.gets{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:15px}
+.gets li{display:flex;gap:10px;align-items:center}
+.gets svg{width:16px;height:16px;padding:3px;border-radius:50%;background:var(--tag-green-bg);color:var(--tag-green);flex:none}
+.missing{padding-block:96px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+.missing h1{font-size:clamp(26px, 4vw, 36px)}

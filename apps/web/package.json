@@ -1,0 +1,34 @@
+{
+  "name": "@ijobs/web",
+  "private": true,
+  "description": "The i-jobs web app: landing page, member app, owner, employer and staff pages.",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "typecheck": "tsc --noEmit",
+    "api:types": "openapi-typescript ../../api/openapi.yaml -o src/lib/api-types.ts",
+    "test": "playwright test -c playwright.unit.config.ts",
+    "e2e": "playwright test",
+    "e2e:report": "playwright show-report e2e/.out/report"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "5.2.6",
+    "next": "15.5.29",
+    "openapi-fetch": "0.14.0",
+    "react": "19.1.10",
+    "react-dom": "19.1.10",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.15.30",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "ioredis": "5.11.1",
+    "openapi-typescript": "7.9.1",
+    "pg": "8.23.1",
+    "typescript": "5.9.2"
+  }
+}

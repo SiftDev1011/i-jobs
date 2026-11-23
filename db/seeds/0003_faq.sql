@@ -1,0 +1,20 @@
+-- Starter help answers, shared by every site. Edit freely; re-running never duplicates.
+-- Prices are deliberately not mentioned: members see their community's price on its join page.
+INSERT INTO faq_articles (site_id, question, answer) VALUES
+  (NULL, 'What is i-jobs?', 'i-jobs finds jobs that fit you, explains why they fit, and can apply for you within rules you set. You join through a community, and the community you join helps keep the jobs and members genuine.'),
+  (NULL, 'How do I join?', 'Use the invite link or code from your community, or search for a community and ask to join. Some communities let you try a free week first.'),
+  (NULL, 'How much does it cost?', 'Each community sets its own price. You will see it on the join page before you pay. Part of what you pay goes to your community and part to i-jobs.'),
+  (NULL, 'How does autopilot apply for me?', 'When autopilot is on, we apply to strong matches that fit your rules: the regions, job types and minimum pay you choose, and up to your daily limit. Each application waits two hours first so you can cancel it. We only send to employers we could check, and we only say things your profile shows.'),
+  (NULL, 'Why was a job put in my apply queue instead of sent?', 'Some jobs must be applied to on the employer''s own site, some employers could not be checked, and some fall outside your autopilot rules. Those wait in your apply queue with the reason shown, so you decide.'),
+  (NULL, 'Where do employer replies go?', 'Employers reply to your i-jobs relay address. We sort the reply and send it straight to your email, so you can answer them directly. You will also see it in your applications.'),
+  (NULL, 'How do I cancel an application autopilot scheduled?', 'Open your applications and cancel it while it still says scheduled. Each one waits two hours before it is sent.'),
+  (NULL, 'How do I upload or change my CV?', 'Go to your profile and upload a PDF or Word file up to 5 MB. We read it into your profile; check it over and confirm it before autopilot uses it. Scans and photos cannot be read, so use a PDF made from a document.'),
+  (NULL, 'Why do I need to confirm my profile?', 'Autopilot writes applications from your profile, so we ask you to check it is right. We ask again every 90 days and whenever you upload a new CV.'),
+  (NULL, 'How do I cancel my membership?', 'Your membership simply ends at the end of the period you paid for if you do not renew. You keep access until then.'),
+  (NULL, 'Can I get a refund?', 'Memberships are not refunded once a trial has ended, except for double or failed charges. Selar access codes never expire and are not refundable. If you were charged twice, contact us and we will fix it.'),
+  (NULL, 'What happens if my community is removed from i-jobs?', 'You keep access until the end of what you paid for. After that you can switch to another community and keep your profile, matches and autopilot settings.'),
+  (NULL, 'How do I spot a job scam?', 'Real employers never ask you to pay a fee, buy equipment, or send your BVN, bank login or card details to apply. Be careful with jobs that only talk on WhatsApp or Telegram or promise very high pay for simple work. Report anything that looks wrong from the job page.'),
+  (NULL, 'How do I get my data or delete my account?', 'Go to your account settings and ask for a copy of your data or for your account to be deleted. We act on it within 30 days. Payment records are kept because the law requires it.'),
+  (NULL, 'When do community owners get paid?', 'Owners are paid monthly, once their balance is at least the payout minimum and the money is at least seven days old. Payouts go to the bank account checked when the community was approved.'),
+  (NULL, 'How do I start a community on i-jobs?', 'Apply from the owner page with your ID, bank account and links to your existing group. Our team reviews every community before it goes live. You set your own price above the minimum shown on the owner page.')
+ON CONFLICT (question) WHERE site_id IS NULL DO NOTHING;

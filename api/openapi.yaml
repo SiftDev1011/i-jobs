@@ -1,0 +1,3342 @@
+openapi: 3.1.0
+info:
+  title: i-jobs engine API
+  version: 0.1.0
+  summary: The job engine behind i-jobs by 99, Remote Hustle and School1.
+  description: |
+    One API serves three kinds of caller:
+
+    - **The i-jobs app** (and its owner dashboard) calls with a user's access token.
+    - **Partner sites** (Remote Hustle, School1, future sites) call from their own servers with
+      their site key. To act for one of their users they add `X-Site-User` with that user's id
+      on their site.
+    - **Staff tools** call the `/admin` endpoints with a staff user's access token.
+
+    ## Conventions
+
+    - **Money** is an integer in the smallest unit (`amount_minor`: kobo for NGN, cents for USD).
+    - **Times** are ISO 8601 in UTC.
+    - **Lists** use cursor paging: pass `cursor` from the previous page's `next_cursor`.
+    - **Errors** use `application/problem+json`. The `code` field is stable; build on it, not on `title`.
+    - **Creating payments, applications or code batches** needs an `Idempotency-Key` header, so a
+      retried request never charges or applies twice.
+
+    ## AI work and the daily budget
+
+    i-jobs runs on Groq's free tier, which caps tokens per day. Endpoints that need AI (CV parsing,
+    apply packs, posting a pasted job, support answers) never fail because of this. They return
+    `202 Accepted` with `status: scheduled` and a `scheduled_for` time when today's budget for that
+    task is spent. Show the user "Scheduled for tomorrow" and listen for the matching webhook or
+    notification.
+
+    ## Prices
+
+    Public endpoints never return community prices or i-jobs' share. A member sees their own
+    community's price only at the payment step (`GET /join/{code}`). The ₦5,000 minimum and the
+    share are only returned to verified owners.
+  contact:
+    name: i-jobs engineering
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: https://api.ijobs.example/v1
+    description: Production (replace with the real domain)
+  - url: http://localhost:3000/v1
+    description: Local development
+security:
+  - userToken: []
+  - siteKey: []
+tags:
+  - name: Auth
+    description: Sign in with a one-time code sent by email or SMS.
+  - name: Account
+    description: The signed-in person, their consents, age checks and data requests.
+  - name: Joining
+    description: Invite links, codes, finding a community, trials and paying a membership.
+  - name: Profile
+    description: CV upload, the profile built from it, and autopilot rules.
+  - name: Jobs
+    description: Browsing and searching jobs, and the public job finds page.
+  - name: Matches
+    description: A member's matched jobs with scores, reasons and skill gaps.
+  - name: Apply queue
+    description: Jobs the member applies to themselves, with packs made on demand.
+  - name: Applications
+    description: Everything sent, its status, cancelling, and "did you hear back?" check-ins.
+  - name: Visitors
+    description: Free applies for visitors before they sign up (partner sites only).
+  - name: Notifications
+    description: In-app alerts such as interview invites, daily summaries and trial reminders.
+  - name: Help
+    description: FAQ search, the support assistant and tickets.
+  - name: Owners
+    description: The community owner dashboard.
+  - name: Selar codes
+    description: Prepaid single-use codes owners sell on Selar.
+  - name: Employers
+    description: Employer verification, direct posts and ATS connections.
+  - name: Partner
+    description: Linking partner-site users and subscribing to events.
+  - name: Incoming webhooks
+    description: Calls the engine receives from Paga, Amazon SES and the email relay.
+  - name: Admin
+    description: Staff only. Moderation, verification, sources, AI budget and payouts.
+
+paths:
+  # ===================================================================== Auth
+  /features:
+    get:
+      tags: [Auth]
+      operationId: getFeatures
+      summary: What this engine offers
+      description: |
+        Texts are optional. With `SMS_DRIVER=none` the engine runs email-only: no phone sign-in, no
+        phone invites, and no free weeks (a free week is tied to a checked phone number). Apps read
+        this to hide what isn't available. Cached for a minute.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [phone_sign_in, phone_invites, free_weeks]
+                properties:
+                  phone_sign_in: { type: boolean }
+                  phone_invites: { type: boolean }
+                  free_weeks: { type: boolean }
+
+  /auth/codes:
+    post:
+      tags: [Auth]
+      operationId: sendSignInCode
+      summary: Send a one-time sign-in code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target]
+              properties:
+                target: { type: string, description: Email address or phone number in E.164 format., examples: ['ada@example.com'] }
+                channel: { type: string, enum: [email, sms], default: email }
+      responses:
+        '204': { description: Code sent. The same response is returned whether or not an account exists. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422':
+          description: A phone number was given but texts are off on this engine (`SMS_DRIVER=none`). `code` is `phone_sign_in_off`; use an email address.
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/sessions:
+    post:
+      tags: [Auth]
+      operationId: signIn
+      summary: Exchange a code for tokens
+      description: Creates the account on first sign-in.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target, code]
+              properties:
+                target: { type: string }
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Signed in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: The code is wrong or expired. `code` is `code_invalid` or `code_expired`; five wrong tries locks the code.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshSession
+      summary: Get a new access token
+      description: |
+        Each refresh token works once. For 20 seconds after it's used, sending it again returns the same
+        new tokens (two tabs refreshing at once). After that, reusing it ends the whole session.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: New tokens. The old refresh token stops working.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/sessions/current:
+    delete:
+      tags: [Auth]
+      operationId: signOut
+      summary: Sign out
+      responses:
+        '204': { description: Signed out. }
+
+  # ===================================================================== Account
+  /me:
+    get:
+      tags: [Account]
+      operationId: getMe
+      summary: The signed-in person
+      parameters: [{ $ref: '#/components/parameters/SiteUser' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [Account]
+      operationId: updateMe
+      summary: Update name, phone or date of birth
+      description: Setting `date_of_birth` sets the age band. Under 13 has no job features; 13 to 17 needs a parent's approval.
+      parameters: [{ $ref: '#/components/parameters/SiteUser' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: { type: string, maxLength: 120 }
+                phone: { type: string, pattern: '^\+[1-9][0-9]{6,14}$' }
+                date_of_birth: { type: string, format: date }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /me/consents:
+    get:
+      tags: [Account]
+      operationId: listConsents
+      summary: Current answer for each consent
+      parameters: [{ $ref: '#/components/parameters/SiteUser' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Consent' }
+    post:
+      tags: [Account]
+      operationId: recordConsent
+      summary: Give or withdraw a consent
+      description: |
+        Consents are recorded, never overwritten. Withdrawing `autopilot` turns autopilot off at once
+        and cancels anything still inside its cancel window.
+      parameters: [{ $ref: '#/components/parameters/SiteUser' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, granted, policy_version]
+              properties:
+                purpose: { $ref: '#/components/schemas/ConsentPurpose' }
+                granted: { type: boolean }
+                policy_version: { type: string, examples: ['2026-11'] }
+      responses:
+        '201':
+          description: Recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Consent' }
+
+  /me/guardian:
+    post:
+      tags: [Account]
+      operationId: requestGuardianApproval
+      summary: Ask a parent to approve a 13 to 17 year old
+      description: Emails the parent a link. Until they approve, job features stay locked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [guardian_name, guardian_email]
+              properties:
+                guardian_name: { type: string }
+                guardian_email: { type: string, format: email }
+      responses:
+        '202': { description: Request sent to the parent. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /guardian/decision:
+    post:
+      tags: [Account]
+      operationId: decideGuardianApproval
+      summary: A parent approves or declines, from the emailed link
+      description: >-
+        Public: the parent has no account. The token from the email is the only proof, works once,
+        and expires after 14 days. Approval records a guardian consent; a site that allows
+        under-18s then unlocks job features for the teen.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, decision]
+              properties:
+                token: { type: string, minLength: 20, description: From the link in the email. }
+                decision: { type: string, enum: [approve, decline] }
+      responses:
+        '200':
+          description: Decision recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decision]
+                properties:
+                  decision: { type: string, enum: [approved, declined] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404':
+          description: "The link expired or was already used (code: link_expired)."
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /me/data-requests:
+    get:
+      tags: [Account]
+      operationId: listDataRequests
+      summary: Requests to see, correct or delete data
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DataRequest' }
+    post:
+      tags: [Account]
+      operationId: createDataRequest
+      summary: Ask for a copy, a correction, deletion, or a human review of a decision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type: { type: string, enum: [export, delete, correct, human_review] }
+                details: { type: string, maxLength: 2000 }
+      responses:
+        '201':
+          description: |
+            Received, and handled by `due_at`. Exports are emailed as a 7-day link. Deletion waits 48 hours
+            (an email says so, and support can stop it), then anonymises the account; payment records stay.
+            Corrections and human reviews go to a person.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataRequest' }
+
+  # ===================================================================== Joining
+  /join/{code}:
+    get:
+      tags: [Joining]
+      operationId: getJoinPage
+      summary: The join page for an invite link or code
+      description: |
+        Works for a community's invite code or slug, and for a single-use Selar code. This is the
+        payment step, so it is the one public place that shows the community's price.
+      security: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+          examples: { slug: { value: lagos-tech }, code: { value: LTH-2048 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JoinPage' }
+        '404':
+          description: No active community or unused code matches. `code` is `invite_not_found` or `code_used`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /join:
+    post:
+      tags: [Joining]
+      operationId: joinCommunity
+      summary: Join with an invite link, code or Selar code
+      description: |
+        - Community invite: creates a membership waiting for payment, or for the owner's approval if
+          they switched approval on.
+        - Selar code: redeems it and the membership starts straight away, already paid.
+
+        The member is credited to this community for good.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+                via: { type: string, enum: [invite_link, invite_code, bulk_invite, job_finds_page], description: Where they came from. Ignored for Selar codes. }
+      responses:
+        '201':
+          description: Joined.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Membership' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Already a member, or the code was already used. `code` is `already_member` or `code_used`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /communities:
+    get:
+      tags: [Joining]
+      operationId: searchCommunities
+      summary: Find a verified community
+      description: No prices here; the price appears on the join page.
+      security: []
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: 'City, skill or name, e.g. "Lagos" or "design".' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/CommunityListing' } }
+
+  /communities/{communityId}/join-requests:
+    post:
+      tags: [Joining]
+      operationId: requestToJoin
+      summary: Ask to join a community found in search
+      description: Creates a membership waiting for the owner's approval.
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      responses:
+        '201':
+          description: Requested.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Membership' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /me/memberships:
+    get:
+      tags: [Joining]
+      operationId: listMyMemberships
+      summary: Communities the member belongs to
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Membership' }
+
+  /memberships/{membershipId}/trial:
+    post:
+      tags: [Joining]
+      operationId: startTrial
+      summary: Start a free trial week
+      description: |
+        Only if the owner offers trials. One trial per person across every community, checked by
+        phone number and payment card. Access ends after seven days unless they pay.
+      parameters: [{ $ref: '#/components/parameters/MembershipId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone_verification_code]
+              properties:
+                phone_verification_code: { type: string, description: 'Code sent to their phone, so the trial is tied to a real number.' }
+                card_token: { type: string, description: "Paga card token, used only to check the card hasn't had a trial. Not charged." }
+      responses:
+        '200':
+          description: Trial started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Membership' }
+        '409':
+          description: '`code` is `trial_not_offered`, `trial_already_used`, or `trials_off` (texts are off on this engine, so there are no free weeks).'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /payments/{paymentId}:
+    get:
+      tags: [Joining]
+      operationId: getPayment
+      summary: Where one of my payments stands
+      description: |
+        For the page Paga sends the payer back to (`PUBLIC_APP_URL/payments/{paymentId}`). Only the
+        person who paid can read it. The Paga webhook, not this page, is what activates anything, so
+        the status may stay `pending` for a few seconds after paying.
+      parameters:
+        - { name: paymentId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentStatus' }
+        '404':
+          description: Not one of this person's payments. `code` is `payment_not_found`.
+
+  /memberships/{membershipId}/checkout:
+    post:
+      tags: [Joining]
+      operationId: startMembershipCheckout
+      summary: Pay the membership through Paga
+      parameters:
+        - { $ref: '#/components/parameters/MembershipId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '201':
+          description: Open `checkout_url`. The membership becomes active when Paga confirms the payment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Checkout' }
+        '403':
+          description: Waiting for the owner's approval (`code` is `awaiting_approval`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ===================================================================== Profile
+  /me/cv:
+    post:
+      tags: [Profile]
+      operationId: startCvUpload
+      summary: Get an upload link for a CV
+      description: Upload the file straight to storage with a PUT to `upload_url`, then call `POST /me/cv/parse`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_name, content_type, size_bytes]
+              properties:
+                file_name: { type: string }
+                content_type: { type: string, enum: [application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document] }
+                size_bytes: { type: integer, maximum: 5242880 }
+      responses:
+        '201':
+          description: Upload link, valid for 15 minutes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [upload_id, upload_url, expires_at]
+                properties:
+                  upload_id: { type: string }
+                  upload_url: { type: string, format: uri }
+                  expires_at: { type: string, format: date-time }
+
+  /me/cv/parse:
+    post:
+      tags: [Profile]
+      operationId: parseCv
+      summary: Turn the uploaded CV into a profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [upload_id]
+              properties:
+                upload_id: { type: string }
+      responses:
+        '202':
+          description: Queued. A `profile.ready` notification follows; if today's AI budget is spent, `status` is `scheduled`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QueuedWork' }
+
+  /me/profile:
+    get:
+      tags: [Profile]
+      operationId: getProfile
+      summary: The member's profile
+      parameters: [{ $ref: '#/components/parameters/SiteUser' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Profile]
+      operationId: updateProfile
+      summary: Correct the profile
+      description: Corrections are kept, with consent, as training examples for the future i-jobs model.
+      parameters: [{ $ref: '#/components/parameters/SiteUser' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfileInput' }
+      responses:
+        '200':
+          description: Updated. Matches are recomputed in the background.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+
+  /me/profile/confirm:
+    post:
+      tags: [Profile]
+      operationId: confirmProfile
+      summary: Confirm the profile is accurate
+      description: Asked at setup and every few months. Autopilot pauses if it hasn't been confirmed in 90 days.
+      responses:
+        '200':
+          description: Confirmed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+
+  /me/autopilot:
+    get:
+      tags: [Profile]
+      operationId: getAutopilotRules
+      summary: Autopilot rules
+      parameters: [{ $ref: '#/components/parameters/SiteUser' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AutopilotRules' }
+    put:
+      tags: [Profile]
+      operationId: setAutopilotRules
+      summary: Set autopilot rules
+      description: Turning autopilot on needs a current `autopilot` consent ("send applications in my name").
+      parameters: [{ $ref: '#/components/parameters/SiteUser' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AutopilotRules' }
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AutopilotRules' }
+        '403':
+          description: '`code` is `consent_required`, `profile_not_confirmed` or `membership_inactive`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ===================================================================== Jobs
+  /jobs:
+    get:
+      tags: [Jobs]
+      operationId: searchJobs
+      summary: Search jobs
+      description: Anyone can browse. Signed-in members also see their match score on each job.
+      security: [{}, { userToken: [] }, { siteKey: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: location, in: query, schema: { type: array, items: { $ref: '#/components/schemas/LocationScope' } }, style: form, explode: false }
+        - { name: employment_type, in: query, schema: { type: array, items: { $ref: '#/components/schemas/EmploymentType' } }, style: form, explode: false }
+        - { name: min_pay_monthly, in: query, schema: { type: integer }, description: In the smallest unit of `currency`. }
+        - { name: currency, in: query, schema: { type: string, default: USD } }
+        - { name: verified_only, in: query, schema: { type: boolean, default: false } }
+        - { name: category, in: query, schema: { type: string }, description: 'customer-support, design, data, writing, engineering, sales, internships' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/JobSummary' } }
+
+  /jobs/{jobId}:
+    get:
+      tags: [Jobs]
+      operationId: getJob
+      summary: One job
+      security: [{}, { userToken: [] }, { siteKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/JobId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410':
+          description: The job has closed, expired or was taken down.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /jobs/{jobId}/reports:
+    post:
+      tags: [Jobs]
+      operationId: reportJob
+      summary: Report a job
+      description: Several reports hide the job until a moderator reviews it.
+      parameters: [{ $ref: '#/components/parameters/JobId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, enum: [scam, asks_for_money, wrong_details, closed, offensive, other] }
+                details: { type: string, maxLength: 1000 }
+      responses:
+        '202': { description: Thanks. A moderator will look at it. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /job-finds:
+    get:
+      tags: [Jobs]
+      operationId: listJobFinds
+      summary: Newest job finds (public, shareable)
+      description: |
+        The free page owners share in WhatsApp and Telegram. Pass `ref` (an owner's invite code) and
+        any sign-up from the page is credited to that community. Includes jobs from sources that
+        only allow free display, such as Remotive and Himalayas, each with its credit and link.
+      security: []
+      parameters:
+        - { name: ref, in: query, schema: { type: string }, description: Community invite code for credit. }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      community: { type: [object, 'null'], properties: { name: { type: string }, slug: { type: string } } }
+                      items: { type: array, items: { $ref: '#/components/schemas/JobSummary' } }
+
+  # ===================================================================== Matches
+  /me/matches:
+    get:
+      tags: [Matches]
+      operationId: listMatches
+      summary: Matched jobs, best first
+      parameters:
+        - { $ref: '#/components/parameters/SiteUser' }
+        - { name: status, in: query, schema: { type: array, items: { type: string, enum: [new, seen, saved, dismissed] } }, style: form, explode: false }
+        - { name: min_score, in: query, schema: { type: integer, minimum: 0, maximum: 100 } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Match' } }
+        '403':
+          description: No active membership (`membership_inactive`) or job features are locked for this age (`age_restricted`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /me/matches/{jobId}:
+    patch:
+      tags: [Matches]
+      operationId: updateMatch
+      summary: Mark a match seen, saved or dismissed
+      parameters:
+        - { $ref: '#/components/parameters/JobId' }
+        - { $ref: '#/components/parameters/SiteUser' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [seen, saved, dismissed] }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Match' }
+
+  # ===================================================================== Apply queue
+  /me/queue:
+    get:
+      tags: [Apply queue]
+      operationId: listQueue
+      summary: Jobs waiting for the member to apply themselves
+      description: Includes unverified jobs (with a warning) and jobs autopilot can't send, such as ones that must open on the source's site.
+      parameters:
+        - { $ref: '#/components/parameters/SiteUser' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/QueueItem' } }
+
+  /me/queue/{jobId}/pack:
+    post:
+      tags: [Apply queue]
+      operationId: getApplyPack
+      summary: Get or make the apply pack for a job
+      description: Made only when the member opens the job. Returns the existing pack straight away if there is one.
+      parameters:
+        - { $ref: '#/components/parameters/JobId' }
+        - { $ref: '#/components/parameters/SiteUser' }
+      responses:
+        '200':
+          description: Ready.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplyPack' }
+        '202':
+          description: Being made, or scheduled if today's AI budget is spent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QueuedWork' }
+
+  /me/queue/{jobId}/applied:
+    post:
+      tags: [Apply queue]
+      operationId: markApplied
+      summary: The member applied on the employer's site
+      parameters:
+        - { $ref: '#/components/parameters/JobId' }
+        - { $ref: '#/components/parameters/SiteUser' }
+      responses:
+        '201':
+          description: Logged as a manual application. A check-in is booked for 10 days later.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '409':
+          description: Already applied to this job (`already_applied`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ===================================================================== Applications
+  /me/applications:
+    get:
+      tags: [Applications]
+      operationId: listApplications
+      summary: Applications and totals
+      parameters:
+        - { $ref: '#/components/parameters/SiteUser' }
+        - { name: status, in: query, schema: { type: array, items: { $ref: '#/components/schemas/ApplicationStatus' } }, style: form, explode: false }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      totals: { $ref: '#/components/schemas/ApplicationTotals' }
+                      items: { type: array, items: { $ref: '#/components/schemas/Application' } }
+
+  /me/applications/summary:
+    get:
+      tags: [Applications]
+      operationId: getDailySummary
+      summary: What autopilot did today
+      parameters:
+        - { $ref: '#/components/parameters/SiteUser' }
+        - { name: date, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DailySummary' }
+
+  /applications/{applicationId}:
+    get:
+      tags: [Applications]
+      operationId: getApplication
+      summary: One application, with the exact copy that was sent
+      parameters:
+        - { $ref: '#/components/parameters/ApplicationId' }
+        - { $ref: '#/components/parameters/SiteUser' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /applications/{applicationId}/cancel:
+    post:
+      tags: [Applications]
+      operationId: cancelApplication
+      summary: Cancel before it's sent
+      parameters:
+        - { $ref: '#/components/parameters/ApplicationId' }
+        - { $ref: '#/components/parameters/SiteUser' }
+      responses:
+        '200':
+          description: Cancelled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '409':
+          description: Already sent (`cancel_window_closed`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /applications/{applicationId}/checkins/{checkinId}:
+    post:
+      tags: [Applications]
+      operationId: answerCheckin
+      summary: Answer "Did you hear back?"
+      parameters:
+        - { $ref: '#/components/parameters/ApplicationId' }
+        - { name: checkinId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer]
+              properties:
+                answer: { type: string, enum: [heard_back, interview, no_reply_yet, rejected, hired, did_not_apply] }
+      responses:
+        '200':
+          description: Saved. The application status updates to match.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+
+  # ===================================================================== Visitors
+  /visitor/codes:
+    post:
+      tags: [Visitors]
+      operationId: sendVisitorCode
+      summary: Verify a visitor's email before a free apply
+      description: Partner sites only. Blocks throwaway email domains, and caps new emails per device and network each day.
+      security: [{ siteKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, device_hash]
+              properties:
+                email: { type: string, format: email }
+                device_hash: { type: string }
+                ip: { type: string, description: "Visitor's IP, hashed before storage." }
+      responses:
+        '204': { description: Code sent. }
+        '422':
+          description: '`code` is `disposable_email` or `device_limit`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /visitor/applies:
+    post:
+      tags: [Visitors]
+      operationId: visitorApply
+      summary: Use one of the free applies
+      description: |
+        Returns the job's apply link and counts it against the visitor's verified email. Once the
+        site's limit is used, the answer is `signup_required`. Jobs from sources that forbid
+        sign-up gates (Remotive, Himalayas) never count and never ask for sign-up.
+      security: [{ siteKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, job_id]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string }
+                job_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK. Open `apply_url`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apply_url, applies_left]
+                properties:
+                  apply_url: { type: string, format: uri }
+                  applies_left: { type: integer }
+                  credit: { type: [string, 'null'] }
+        '403':
+          description: Free applies used up (`signup_required`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ===================================================================== Notifications
+  /me/notifications:
+    get:
+      tags: [Notifications]
+      operationId: listNotifications
+      summary: Notifications
+      parameters:
+        - { $ref: '#/components/parameters/SiteUser' }
+        - { name: unread, in: query, schema: { type: boolean } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      unread_count: { type: integer }
+                      items: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+
+  /me/notifications/read:
+    post:
+      tags: [Notifications]
+      operationId: markNotificationsRead
+      summary: Mark notifications read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids: { type: array, items: { type: string, format: uuid }, description: Leave out to mark all as read. }
+      responses:
+        '204': { description: Done. }
+
+  # ===================================================================== Help
+  /help/search:
+    get:
+      tags: [Help]
+      operationId: searchHelp
+      summary: Search the FAQ
+      description: Matches by meaning, so "when do I get paid" finds the payouts answer. No AI call.
+      security: [{}, { userToken: [] }, { siteKey: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FaqResult' }
+
+  /help/ask:
+    post:
+      tags: [Help]
+      operationId: askAssistant
+      summary: Ask the support assistant
+      description: |
+        Tries the FAQ first. Only uses AI when the FAQ has no good answer. Questions about payments,
+        scams, data or a complaint go straight to a person.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: Answered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [answer, source]
+                properties:
+                  answer: { type: string }
+                  source: { type: string, enum: [faq, assistant] }
+                  ticket_id: { type: [string, 'null'], format: uuid, description: Set when handed to a person. }
+        '202':
+          description: Handed to a person, or scheduled because today's AI budget is spent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QueuedWork' }
+
+  /support/tickets:
+    get:
+      tags: [Support]
+      operationId: listMyTickets
+      summary: The member's tickets, newest first
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    subject: { type: string }
+                    category: { type: [string, 'null'] }
+                    status: { type: string, enum: [open, bot_answered, waiting_human, resolved] }
+                    created_at: { type: string, format: date-time }
+    post:
+      tags: [Help]
+      operationId: createTicket
+      summary: Contact a person
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, message]
+              properties:
+                subject: { type: string }
+                category: { type: string, enum: [payment, scam_report, data_request, account, other] }
+                message: { type: string }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+
+  /support/tickets/{ticketId}:
+    get:
+      tags: [Help]
+      operationId: getTicket
+      summary: A ticket and its messages
+      parameters: [{ name: ticketId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+
+  /support/tickets/{ticketId}/messages:
+    post:
+      tags: [Help]
+      operationId: replyToTicket
+      summary: Reply on a ticket
+      parameters: [{ name: ticketId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+      responses:
+        '204': { description: Sent. The ticket goes back to a person. }
+
+  # ===================================================================== Owners
+  /owner/applications:
+    post:
+      tags: [Owners]
+      operationId: applyAsOwner
+      summary: Apply to run a community on i-jobs
+      description: |
+        Collects identity, payout and community details for review by our team. One owner identity
+        per person, checked against ID and bank account. Nothing goes live until approved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OwnerApplication' }
+      responses:
+        '201':
+          description: Submitted for review.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OwnerCommunity' }
+        '409':
+          description: '`code` is `owner_identity_exists`, `owner_banned` or `slug_taken`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: Price below the minimum (`price_below_minimum`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /owner/pricing-rules:
+    get:
+      tags: [Owners]
+      operationId: getOwnerPricingRules
+      summary: The price floor and i-jobs' share
+      description: Shown on the owner onboarding page only.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [minimum_price, platform_share_percent, code_unit_share, billing_periods]
+                properties:
+                  minimum_price: { $ref: '#/components/schemas/Money' }
+                  platform_share_percent: { type: number, description: OPEN. Not decided yet. }
+                  code_unit_share: { $ref: '#/components/schemas/Money' }
+                  billing_periods: { type: array, items: { type: string, enum: [monthly, quarterly, yearly] } }
+
+  /owner/communities:
+    get:
+      tags: [Owners]
+      operationId: listOwnerCommunities
+      summary: The owner's communities
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OwnerCommunity' }
+
+  /owner/communities/{communityId}:
+    get:
+      tags: [Owners]
+      operationId: getOwnerCommunity
+      summary: One community
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OwnerCommunity' }
+    patch:
+      tags: [Owners]
+      operationId: updateOwnerCommunity
+      summary: Change price, trial or approval settings
+      description: A new price applies from each member's next period.
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description: { type: string }
+                price: { $ref: '#/components/schemas/Money', description: New prices apply from each member's next period. }
+                billing_period: { type: string, enum: [monthly, quarterly, yearly] }
+                trial_enabled: { type: boolean }
+                approval_required: { type: boolean }
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OwnerCommunity' }
+        '422':
+          description: Price below the minimum (`price_below_minimum`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /owner/communities/{communityId}/funnel:
+    get:
+      tags: [Owners]
+      operationId: getFunnel
+      summary: Invited, joined, paid and stuck
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Funnel' }
+
+  /owner/communities/{communityId}/members:
+    get:
+      tags: [Owners]
+      operationId: listOwnerMembers
+      summary: Members' first names and progress
+      description: Never returns email, phone, CV or applications.
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { name: stage, in: query, schema: { type: string, enum: [awaiting_approval, not_paid_yet, on_trial, stuck_no_cv, stuck_no_rules, fully_set_up] } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/OwnerMember' } }
+
+  /owner/communities/{communityId}/members/{membershipId}/approve:
+    post:
+      tags: [Owners]
+      operationId: approveMember
+      summary: Let a member in (when approval is on)
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { $ref: '#/components/parameters/MembershipId' }
+      responses:
+        '200':
+          description: Approved. They can now pay or start a trial.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OwnerMember' }
+
+  /owner/communities/{communityId}/members/{membershipId}/decline:
+    post:
+      tags: [Owners]
+      operationId: declineMember
+      summary: Turn down a join request
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { $ref: '#/components/parameters/MembershipId' }
+      responses:
+        '204': { description: Declined. }
+
+  /owner/communities/{communityId}/members/{membershipId}/nudge:
+    post:
+      tags: [Owners]
+      operationId: nudgeMember
+      summary: Remind a member to finish setting up
+      description: i-jobs sends the reminder; the owner never sees their contact details. Once every 3 days per member.
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { $ref: '#/components/parameters/MembershipId' }
+      responses:
+        '202': { description: Reminder sent. }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /owner/communities/{communityId}/invites:
+    get:
+      tags: [Owners]
+      operationId: listInvites
+      summary: Bulk invites and their progress
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Invite' } }
+    post:
+      tags: [Owners]
+      operationId: sendInvites
+      summary: Invite a list of phone numbers or emails
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targets]
+              properties:
+                targets: { type: array, maxItems: 500, items: { type: string }, description: Emails or E.164 phone numbers. }
+      responses:
+        '202':
+          description: Queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queued: { type: integer }
+                  skipped_duplicates: { type: integer }
+                  invalid: { type: array, items: { type: string } }
+
+  /owner/communities/{communityId}/demo-tours:
+    post:
+      tags: [Owners]
+      operationId: startDemoTour
+      summary: Start a demo tour with sample data
+      description: Two per community. Uses sample profiles and jobs; nothing is ever sent.
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      responses:
+        '201':
+          description: Demo started.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  demo_url: { type: string, format: uri }
+                  tours_left: { type: integer, minimum: 0, maximum: 1 }
+        '409':
+          description: Both tours used (`demo_tours_used_up`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /owner/communities/{communityId}/jobs:
+    get:
+      tags: [Owners]
+      operationId: listCommunityJobs
+      summary: Jobs this community posted
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/CommunityJob' } }
+    post:
+      tags: [Owners]
+      operationId: pasteJob
+      summary: Paste a job and turn it into a listing
+      description: |
+        Text or a flyer image. AI reads it, rewrites it into a clean listing and screens it. The owner
+        then confirms the details. Flagged posts show "under review" and never say why.
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: { type: string, maxLength: 20000 }
+                image_upload_id: { type: string }
+              oneOf:
+                - required: [text]
+                - required: [image_upload_id]
+      responses:
+        '202':
+          description: Being read, or scheduled if today's AI budget is spent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QueuedWork' }
+
+  /owner/communities/{communityId}/jobs/{jobId}/confirm:
+    post:
+      tags: [Owners]
+      operationId: confirmPastedJob
+      summary: Confirm (and correct) the listing before it goes live
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { $ref: '#/components/parameters/JobId' }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JobCorrections' }
+      responses:
+        '200':
+          description: Live, or under review.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommunityJob' }
+
+  /owner/communities/{communityId}/jobs/{jobId}/renew:
+    post:
+      tags: [Owners]
+      operationId: renewPastedJob
+      summary: Keep a pasted job up for another 21 days
+      description: Never past 60 days from when it was first posted.
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { $ref: '#/components/parameters/JobId' }
+      responses:
+        '200':
+          description: Renewed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommunityJob' }
+        '409':
+          description: Already at 60 days (`max_age_reached`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /owner/communities/{communityId}/strikes:
+    get:
+      tags: [Owners]
+      operationId: listStrikes
+      summary: Strikes against the community, and whether each was appealed
+      description: Three strikes suspend a community. Each strike can be appealed once.
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      responses:
+        '200':
+          description: Newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OwnerStrike' }
+
+  /demo/{token}:
+    get:
+      tags: [Owners]
+      operationId: getDemoTour
+      summary: Open a demo tour link
+      description: |
+        The link from `POST /owner/communities/{id}/demo-tours`, for someone the owner is showing
+        i-jobs to. It lasts a day. The web app shows sample data only; nothing is ever sent.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [community, expires_at]
+                properties:
+                  community:
+                    type: object
+                    properties:
+                      name: { type: string }
+                      slug: { type: string }
+                  expires_at: { type: string, format: date-time }
+        '404':
+          description: The link ended or never existed. `code` is `demo_not_found`.
+
+  /owner/communities/{communityId}/earnings:
+    get:
+      tags: [Owners]
+      operationId: getEarnings
+      summary: Balance and payouts
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Earnings' }
+
+  /owner/communities/{communityId}/strikes/{strikeId}/appeal:
+    post:
+      tags: [Owners]
+      operationId: appealStrike
+      summary: Appeal a strike
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { name: strikeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 2000 }
+      responses:
+        '202': { description: Appeal sent for review. }
+
+  # ===================================================================== Selar codes
+  /owner/communities/{communityId}/code-batches:
+    get:
+      tags: [Selar codes]
+      operationId: listCodeBatches
+      summary: Code batches and how many are used
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CodeBatch' }
+    post:
+      tags: [Selar codes]
+      operationId: buyCodeBatch
+      summary: Buy a batch of single-use codes
+      description: |
+        The owner pays i-jobs' share per code upfront and keeps whatever they charge on Selar.
+        Codes never expire and are non-refundable, so `accept_terms` must be true.
+      parameters:
+        - { $ref: '#/components/parameters/CommunityId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity, accept_terms]
+              properties:
+                quantity: { type: integer, minimum: 1, maximum: 10000 }
+                accept_terms: { type: boolean, const: true, description: '"Codes never expire and are non-refundable."' }
+      responses:
+        '201':
+          description: Pay at `checkout_url`. Codes are created when Paga confirms.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batch: { $ref: '#/components/schemas/CodeBatch' }
+                  checkout: { $ref: '#/components/schemas/Checkout' }
+
+  /owner/code-batches/{batchId}/codes:
+    get:
+      tags: [Selar codes]
+      operationId: downloadCodes
+      summary: Download a paid batch's codes
+      description: CSV for uploading to Selar as the delivered item.
+      parameters: [{ name: batchId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: One code per line, with its status.
+          content:
+            text/csv:
+              schema: { type: string }
+              example: "code,status\nSEL-7KQ2-XM4P,unused\nSEL-9TRD-2LWA,redeemed\n"
+        '402':
+          description: Batch not paid yet (`batch_unpaid`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ===================================================================== Employers
+  /employers/mine:
+    get:
+      tags: [Employers]
+      operationId: listMyEmployers
+      summary: Companies I have confirmed a work email at
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - { $ref: '#/components/schemas/Employer' }
+                    - type: object
+                      properties:
+                        role: { type: string, examples: [owner, recruiter] }
+
+  /employers/{employerId}:
+    get:
+      tags: [Employers]
+      operationId: getEmployer
+      summary: One company, its connected ATS boards and its posted jobs
+      parameters: [{ $ref: '#/components/parameters/EmployerId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmployerDetail' }
+        '403':
+          description: Not a confirmed member of this company. `code` is `not_employer_member` or `employer_revoked`.
+
+  /employers/verifications:
+    post:
+      tags: [Employers]
+      operationId: startEmployerVerification
+      summary: Start verifying a company
+      description: |
+        Sends a code to an email on the company's own domain. After the code, the website is checked
+        automatically and a person checks the company registry; all three make the employer verified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_name, work_email, website_url]
+              properties:
+                company_name: { type: string }
+                work_email: { type: string, format: email }
+                website_url: { type: string, format: uri }
+                registry_number: { type: string, description: e.g. CAC RC number }
+                country: { type: string, minLength: 2, maxLength: 2 }
+      responses:
+        '202':
+          description: Code sent to the work email.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employer_id: { type: string, format: uuid }
+                  sent_to: { type: string, format: email }
+        '422':
+          description: The email isn't on the website's domain (`domain_mismatch`) or uses a free email provider (`free_email_provider`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /employers/verifications/confirm:
+    post:
+      tags: [Employers]
+      operationId: confirmEmployerVerification
+      summary: Confirm the work email code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [work_email, code]
+              properties:
+                work_email: { type: string, format: email }
+                code: { type: string }
+      responses:
+        '200':
+          description: Email confirmed. Verification finishes after the website and registry checks.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Employer' }
+
+  /employers/{employerId}/jobs:
+    post:
+      tags: [Employers]
+      operationId: postEmployerJob
+      summary: Post a job directly
+      parameters: [{ $ref: '#/components/parameters/EmployerId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JobInput' }
+      responses:
+        '201':
+          description: |
+            Live at once for verified employers when nothing looks wrong; otherwise under review.
+            With `accept_on_platform`, applications arrive by email at `apply_email` or the poster's work
+            address until the employer inbox ships.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobDetail' }
+
+  /employers/{employerId}/integrations:
+    post:
+      tags: [Employers]
+      operationId: connectAts
+      summary: Connect Greenhouse or Lever so applications go straight in
+      description: The key is encrypted before it's stored and only the last four characters are ever shown.
+      parameters: [{ $ref: '#/components/parameters/EmployerId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, board_token, api_key]
+              properties:
+                provider: { type: string, enum: [greenhouse, lever, ashby] }
+                board_token: { type: string }
+                api_key: { type: string, writeOnly: true }
+      responses:
+        '201':
+          description: Connected after a test call succeeds.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Integration' }
+        '422':
+          description: The key didn't work (`key_rejected`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /employers/{employerId}/integrations/{integrationId}:
+    delete:
+      tags: [Employers]
+      operationId: disconnectAts
+      summary: Disconnect an ATS
+      parameters:
+        - { $ref: '#/components/parameters/EmployerId' }
+        - { name: integrationId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Disconnected. The key is deleted. }
+
+  # ===================================================================== Partner
+  /partner/users:
+    post:
+      tags: [Partner]
+      operationId: linkPartnerUser
+      summary: Link a partner-site user to an i-jobs person
+      description: |
+        Call when one of your users opens the job features. If the email already belongs to an i-jobs
+        person, they are asked to agree before the accounts are linked (`linked: false` until then).
+      security: [{ siteKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [external_user_id, email, email_verified]
+              properties:
+                external_user_id: { type: string }
+                email: { type: string, format: email }
+                email_verified: { type: boolean }
+                full_name: { type: string }
+                date_of_birth: { type: string, format: date }
+                completed_trainings: { type: array, items: { type: string }, description: Course ids on your site; used to close skill gaps. Needs the member's consent. }
+      responses:
+        '200':
+          description: Linked or created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id: { type: string, format: uuid }
+                  linked: { type: boolean }
+                  consent_url: { type: [string, 'null'], format: uri }
+
+  /partner/links/{token}:
+    get:
+      tags: [Partner]
+      operationId: previewPartnerLink
+      summary: What a partner site is asking to link (the member's view)
+      description: Opened from the consent link emailed to the member. They must be signed in as that person.
+      security: [{ userToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/LinkToken' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  site: { type: string }
+                  shares: { type: array, items: { type: string, enum: [profile, matches, applications, notifications] } }
+        '403': { description: Signed in as someone else (`wrong_account`). }
+        '404': { description: Expired or used (`link_expired`). }
+
+  /partner/links/{token}/accept:
+    post:
+      tags: [Partner]
+      operationId: acceptPartnerLink
+      summary: Agree to link the accounts
+      security: [{ userToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/LinkToken' }]
+      responses:
+        '200':
+          description: 'Linked. The partner''s next POST /partner/users returns linked: true.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  linked: { type: boolean }
+                  site: { type: string }
+
+  /partner/links/{token}/decline:
+    post:
+      tags: [Partner]
+      operationId: declinePartnerLink
+      summary: Say no; nothing is shared
+      security: [{ userToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/LinkToken' }]
+      responses:
+        '204': { description: Declined. }
+
+  /partner/trainings:
+    put:
+      tags: [Partner]
+      operationId: syncTrainings
+      summary: Send your course catalogue
+      description: Skill gaps link to these courses. Replaces your site's catalogue.
+      security: [{ siteKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/Training' }
+      responses:
+        '202': { description: Accepted. Courses are indexed in the background. }
+
+  /partner/webhooks:
+    get:
+      tags: [Partner]
+      operationId: listWebhooks
+      summary: Your webhook endpoints
+      security: [{ siteKey: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WebhookEndpoint' }
+    post:
+      tags: [Partner]
+      operationId: createWebhook
+      summary: Subscribe to events
+      description: |
+        Each delivery is a `WebhookEvent`, signed with `X-Ijobs-Signature: t=<unix time>,v1=<hex HMAC-SHA256 of "t.body">`
+        using the secret returned here. Failed deliveries are retried with backoff for 24 hours.
+      security: [{ siteKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url: { type: string, format: uri }
+                events: { type: array, items: { $ref: '#/components/schemas/EventType' } }
+      responses:
+        '201':
+          description: Created. The secret is shown once.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/WebhookEndpoint' }
+                  - type: object
+                    properties:
+                      secret: { type: string }
+
+  /partner/webhooks/{endpointId}:
+    delete:
+      tags: [Partner]
+      operationId: deleteWebhook
+      summary: Stop sending events to an endpoint
+      security: [{ siteKey: [] }]
+      parameters: [{ name: endpointId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '204': { description: Deleted. }
+
+  # ===================================================================== Incoming webhooks
+  /hooks/paga:
+    post:
+      tags: [Incoming webhooks]
+      operationId: pagaWebhook
+      summary: Payment notifications from Paga
+      description: Verified with Paga's signature. Safe to receive twice; `provider_ref` makes it idempotent.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: Received. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /hooks/ses:
+    post:
+      tags: [Incoming webhooks]
+      operationId: sesWebhook
+      summary: Bounces and complaints from Amazon SES (via SNS)
+      description: Verified with the SNS message signature. Bounced or complaining addresses are suppressed; users with many bounces are paused.
+      security: []
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema: { type: string }
+      responses:
+        '200': { description: Received. }
+
+  /hooks/inbound-email:
+    post:
+      tags: [Incoming webhooks]
+      operationId: inboundEmail
+      summary: Replies to relay addresses (from the Cloudflare email worker)
+      description: |
+        The worker stores the raw message in R2 and posts its details here, signed with a shared
+        secret in `X-Ijobs-Signature`. The engine matches it to the application and queues it for sorting.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, from, raw_key]
+              properties:
+                to: { type: string }
+                from: { type: string }
+                subject: { type: string }
+                message_id: { type: string }
+                in_reply_to: { type: string }
+                raw_key: { type: string, description: R2 object key of the full message. }
+                text: { type: string, description: 'Plain text of the message, already extracted by the worker. Optional: without it the engine reads the raw message.' }
+      responses:
+        '202': { description: Queued. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ===================================================================== Admin
+  /admin/moderation:
+    get:
+      tags: [Admin]
+      operationId: listModeration
+      summary: Review queue
+      parameters:
+        - { name: subject, in: query, schema: { type: string, enum: [job, community, owner, employer, user] } }
+        - { name: status, in: query, schema: { type: string, enum: [open, in_review, escalated, approved, rejected] }, description: Leave out for everything still open. }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/ModerationItem' } }
+
+  /admin/moderation/{itemId}/decision:
+    post:
+      tags: [Admin]
+      operationId: decideModeration
+      summary: Approve, reject or escalate
+      description: |
+        Rejecting a job as a scam adds it to the scam list everywhere and alerts anyone who applied.
+        For a strike appeal (`subject_type: community`, reason `strike appeal <id>`), `approve`
+        takes the strike back and lifts a suspension it caused; `reject` keeps it. New community
+        applications are decided with `POST /admin/communities/{id}/verify` instead.
+      parameters: [{ name: itemId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approve, reject, reject_as_scam, escalate] }
+                note: { type: string }
+                strike: { type: boolean, description: Also give the posting community a strike. }
+      responses:
+        '200':
+          description: Decided.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModerationItem' }
+
+  /admin/support/tickets:
+    get:
+      tags: [Admin]
+      operationId: listSupportTickets
+      summary: Support queue
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, bot_answered, waiting_human, resolved] }, description: Leave out for everything not resolved. }
+      responses:
+        '200':
+          description: Oldest first.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string, format: uuid }
+                            subject: { type: string }
+                            category: { type: [string, 'null'] }
+                            status: { type: string }
+                            site_id: { type: string, format: uuid }
+                            created_at: { type: string, format: date-time }
+
+  /admin/support/tickets/{ticketId}:
+    get:
+      tags: [Admin]
+      operationId: getSupportTicket
+      summary: A ticket and its messages
+      parameters: [{ name: ticketId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+
+  /admin/support/tickets/{ticketId}/messages:
+    post:
+      tags: [Admin]
+      operationId: answerSupportTicket
+      summary: Answer a ticket
+      description: The member gets a notification (and an email) with the answer.
+      parameters: [{ name: ticketId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, maxLength: 5000 }
+                resolve: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Sent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+
+  /admin/data-requests:
+    get:
+      tags: [Admin]
+      operationId: listDataRequestsAdmin
+      summary: Open data requests (data protection officer)
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [received, in_progress, done, refused] }, description: Leave out for everything still open. }
+      responses:
+        '200':
+          description: Soonest due first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - { $ref: '#/components/schemas/DataRequest' }
+                    - type: object
+                      properties:
+                        user_id: { type: string, format: uuid }
+                        details: { type: [string, 'null'] }
+                        process_after: { type: string, format: date-time }
+
+  /admin/data-requests/{requestId}:
+    post:
+      tags: [Admin]
+      operationId: closeDataRequest
+      summary: Close a request by hand
+      description: For corrections and human reviews. Refusing a deletion that hasn't run yet stops it.
+      parameters: [{ name: requestId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [done, refused] }
+                note: { type: string, maxLength: 2000 }
+      responses:
+        '200': { description: Closed. }
+        '409': { description: Already finished (`request_closed`). }
+
+  /admin/communities/{communityId}/verify:
+    post:
+      tags: [Admin]
+      operationId: verifyCommunity
+      summary: Approve or reject a community application
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected, needs_more_info] }
+                note: { type: string }
+      responses:
+        '200':
+          description: Decided.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OwnerCommunity' }
+
+  /admin/communities/{communityId}/ban:
+    post:
+      tags: [Admin]
+      operationId: banCommunity
+      summary: Ban a community
+      description: |
+        Unused Selar codes stop working and payouts freeze at once. Members keep access until their
+        period ends and are offered a switch to another community or to Remote Hustle.
+      parameters: [{ $ref: '#/components/parameters/CommunityId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Banned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OwnerCommunity' }
+
+  /admin/jobs/{jobId}/takedown:
+    post:
+      tags: [Admin]
+      operationId: takeDownJob
+      summary: Take a job down now
+      description: Removes it everywhere at once, including cached job pages.
+      parameters: [{ $ref: '#/components/parameters/JobId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, enum: [scam, closed, terms, duplicate, other] }
+      responses:
+        '204': { description: Taken down. }
+
+  /admin/sources:
+    get:
+      tags: [Admin]
+      operationId: listSources
+      summary: Job sources, their rules and health
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Source' }
+
+  /admin/sources/{sourceKey}:
+    patch:
+      tags: [Admin]
+      operationId: updateSource
+      summary: Change a source's rules
+      description: For example, move Remotive into matching once they reply with written permission.
+      parameters: [{ name: sourceKey, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SourceRulesInput' }
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Source' }
+
+  /admin/ai-budget:
+    get:
+      tags: [Admin]
+      operationId: getAiBudget
+      summary: Today's AI budget by task
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  day: { type: string, format: date }
+                  resets_at: { type: string, format: date-time }
+                  tasks: { type: array, items: { $ref: '#/components/schemas/AiBudgetRow' } }
+                  waiting: { type: object, additionalProperties: { type: integer }, description: 'Jobs waiting for tomorrow, by task.' }
+
+  /admin/payouts:
+    get:
+      tags: [Admin]
+      operationId: listPayouts
+      summary: Payouts by status
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [held, ready, processing, paid, frozen, failed] } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/AdminPayout' }
+
+  /admin/payouts/{payoutId}/paid:
+    post:
+      tags: [Admin]
+      operationId: markPayoutPaid
+      summary: Confirm a released payout was sent
+      description: >-
+        During the beta, finance sends each released payout from the Paga business account and then
+        confirms it here with the transfer reference. Only then does the ledger record the money as paid.
+      parameters: [{ name: payoutId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reference]
+              properties:
+                reference: { type: string, minLength: 4, maxLength: 100 }
+      responses:
+        '200':
+          description: Marked paid.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payout' }
+        '409':
+          description: Not released yet (`payout_not_processing`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /admin/payouts/{payoutId}/release:
+    post:
+      tags: [Admin]
+      operationId: releasePayout
+      summary: Send a payout through Paga
+      description: Only after the holding period, with the owner's identity verified and no open fraud signals.
+      parameters: [{ name: payoutId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '202':
+          description: Sending.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payout' }
+        '409':
+          description: '`code` is `still_on_hold`, `identity_unverified` or `fraud_review`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+webhooks:
+  applicationStatusChanged:
+    post:
+      tags: [Partner]
+      operationId: onApplicationStatusChanged
+      summary: application.status_changed
+      description: Sent, replied, interview invite, rejected, offer, hired, and so on.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/WebhookEvent' }
+                - type: object
+                  properties:
+                    data: { $ref: '#/components/schemas/Application' }
+      responses:
+        '200': { description: Return any 2xx to acknowledge. }
+  matchCreated:
+    post:
+      tags: [Partner]
+      operationId: onMatchCreated
+      summary: match.created
+      description: A strong new match (at or above the member's minimum).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/WebhookEvent' }
+                - type: object
+                  properties:
+                    data: { $ref: '#/components/schemas/Match' }
+      responses:
+        '200': { description: Acknowledged. }
+  workReady:
+    post:
+      tags: [Partner]
+      operationId: onWorkReady
+      summary: work.ready
+      description: Scheduled AI work finished (profile ready, apply pack ready).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/WebhookEvent' }
+                - type: object
+                  properties:
+                    data: { $ref: '#/components/schemas/QueuedWork' }
+      responses:
+        '200': { description: Acknowledged. }
+
+components:
+  securitySchemes:
+    userToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from `POST /auth/sessions`. Lasts 15 minutes; refresh with `POST /auth/refresh`.
+    siteKey:
+      type: apiKey
+      in: header
+      name: X-Site-Key
+      description: |
+        A partner site's secret key, used only from its servers. Add `X-Site-User` with your own user
+        id to act for one of your users. Requests only ever see that site's rows.
+
+  parameters:
+    LinkToken:
+      name: token
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{20,64}$' }
+    SiteUser:
+      name: X-Site-User
+      in: header
+      required: false
+      description: Partner sites only. Your site's id for the user you're acting for.
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: A unique value per attempt (a UUID). Retrying with the same key returns the first result.
+      schema: { type: string, maxLength: 100 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CommunityId:
+      name: communityId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MembershipId:
+      name: membershipId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ApplicationId:
+      name: applicationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    EmployerId:
+      name: employerId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Something in the request is missing or invalid. `errors` lists each field.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Missing, expired or invalid credentials.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Not found, or not visible to this caller.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: The request conflicts with the current state. See `code`.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: Slow down. `Retry-After` says how many seconds to wait.
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, format: uri, default: about:blank }
+        title: { type: string, examples: ['That code is already used'] }
+        status: { type: integer }
+        code: { type: string, description: Stable machine-readable reason., examples: [code_used] }
+        detail: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+
+    Page:
+      type: object
+      required: [items]
+      properties:
+        next_cursor: { type: [string, 'null'] }
+
+    Money:
+      type: object
+      required: [amount_minor, currency]
+      properties:
+        amount_minor: { type: integer, description: 'Smallest unit (kobo, cents).', examples: [600000] }
+        currency: { type: string, minLength: 3, maxLength: 3, examples: [NGN] }
+
+    QueuedWork:
+      type: object
+      required: [work_id, kind, status]
+      properties:
+        work_id: { type: string, format: uuid }
+        kind: { type: string, enum: [cv_parse, apply_pack, job_paste, support_answer] }
+        status: { type: string, enum: [queued, running, scheduled, done, failed] }
+        scheduled_for: { type: [string, 'null'], format: date-time, description: Set when today's AI budget is spent. }
+        reason: { type: [string, 'null'], enum: [daily_ai_budget, handed_to_person, null] }
+        ticket_id: { type: [string, 'null'], format: uuid, description: Set when the question was handed to a person. }
+
+    Session:
+      type: object
+      required: [access_token, refresh_token, expires_in, user]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, examples: [900] }
+        user: { $ref: '#/components/schemas/Me' }
+
+    Me:
+      type: object
+      required: [id, age_band, features_locked]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: [string, 'null'], format: email }
+        phone: { type: [string, 'null'] }
+        full_name: { type: [string, 'null'] }
+        age_band: { type: string, enum: [unknown, under_13, teen, adult] }
+        features_locked: { type: boolean, description: "True under 13, or 13 to 17 without a parent's approval." }
+        is_owner: { type: boolean }
+        is_staff: { type: boolean }
+        staff_role:
+          type: [string, 'null']
+          enum: [admin, support, moderator, finance, dpo, null]
+          description: Which staff tools this person can use. Null for everyone else.
+        is_employer: { type: boolean, description: Has confirmed a work email at a company. }
+        relay_address: { type: [string, 'null'], examples: ['ada.okafor@apply.ijobs.example'] }
+        active_membership: { oneOf: [{ $ref: '#/components/schemas/Membership' }, { type: 'null' }] }
+
+    ConsentPurpose:
+      type: string
+      enum: [terms, privacy, matching, autopilot, reply_reading, cross_site_linking, cross_site_marketing, training_data]
+
+    Consent:
+      type: object
+      required: [purpose, granted, policy_version, created_at]
+      properties:
+        purpose: { $ref: '#/components/schemas/ConsentPurpose' }
+        granted: { type: boolean }
+        policy_version: { type: string }
+        created_at: { type: string, format: date-time }
+
+    DataRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [export, delete, correct, human_review] }
+        status: { type: string, enum: [received, in_progress, done, refused] }
+        due_at: { type: string, format: date-time }
+        completed_at: { type: [string, 'null'], format: date-time }
+        download_url: { type: [string, 'null'], format: uri, description: For finished exports. }
+
+    JoinPage:
+      type: object
+      required: [kind, community]
+      properties:
+        kind: { type: string, enum: [community_invite, access_code] }
+        community:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            slug: { type: string }
+            description: { type: [string, 'null'] }
+            member_count: { type: integer }
+            verified: { type: boolean }
+        price: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }], description: Null for an access code (already paid). }
+        billing_period: { type: string, enum: [monthly, quarterly, yearly] }
+        trial_available: { type: boolean, description: The owner offers trials. Whether this person can still have one is checked at start. }
+        approval_required: { type: boolean }
+
+    CommunityListing:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        member_count: { type: integer }
+        verified: { type: boolean }
+
+    Membership:
+      type: object
+      required: [id, community, status, onboarding_step]
+      properties:
+        id: { type: string, format: uuid }
+        community:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            slug: { type: string }
+        status: { type: string, enum: [pending_approval, pending_payment, trialing, active, past_due, expired, cancelled] }
+        source: { type: string, enum: [invite_link, invite_code, bulk_invite, job_finds_page, access_code, switched] }
+        onboarding_step: { type: string, enum: [joined, paid, cv_uploaded, rules_set, complete] }
+        trial_ends_at: { type: [string, 'null'], format: date-time }
+        current_period_end: { type: [string, 'null'], format: date-time }
+        switch_offer: { type: boolean, description: True when the community was banned and the member can switch. }
+
+    Checkout:
+      type: object
+      required: [payment_id, checkout_url, amount]
+      properties:
+        payment_id: { type: string, format: uuid }
+        provider: { type: string, const: paga }
+        reference: { type: string }
+        checkout_url: { type: string, format: uri }
+        amount: { $ref: '#/components/schemas/Money' }
+        expires_at: { type: string, format: date-time }
+
+    Profile:
+      allOf:
+        - { $ref: '#/components/schemas/ProfileInput' }
+        - type: object
+          properties:
+            strength: { type: integer, minimum: 0, maximum: 100 }
+            strength_tips: { type: array, items: { type: string }, examples: [['Add a portfolio link']] }
+            cv: { type: object, properties: { uploaded: { type: boolean }, parsed_at: { type: [string, 'null'], format: date-time } } }
+            confirmed_at: { type: [string, 'null'], format: date-time }
+            needs_confirmation: { type: boolean }
+
+    ProfileInput:
+      type: object
+      properties:
+        headline: { type: string, examples: ['Customer support specialist'] }
+        summary: { type: string }
+        years_experience: { type: number, minimum: 0 }
+        country: { type: string, minLength: 2, maxLength: 2, examples: [NG] }
+        city: { type: string }
+        timezone: { type: string, examples: [Africa/Lagos] }
+        work_authorization:
+          type: object
+          description: Where they can legally work.
+          properties:
+            remote_any_country: { type: boolean }
+            countries: { type: array, items: { type: string } }
+        skills: { type: array, items: { type: string } }
+        experience:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              company: { type: string }
+              start: { type: string, format: date }
+              end: { type: [string, 'null'], format: date }
+              highlights: { type: array, items: { type: string } }
+        education:
+          type: array
+          items:
+            type: object
+            properties:
+              school: { type: string }
+              qualification: { type: string }
+              year: { type: integer }
+        languages: { type: array, items: { type: string } }
+        links: { type: array, items: { type: string, format: uri } }
+
+    AutopilotRules:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        min_match: { type: integer, minimum: 0, maximum: 100, default: 80 }
+        min_pay_monthly: { $ref: '#/components/schemas/Money' }
+        regions: { type: array, items: { type: string }, examples: [[worldwide, africa]] }
+        include_unspecified: { type: boolean, default: false, description: Also apply to jobs that don't say where they hire. }
+        employment_types: { type: array, items: { $ref: '#/components/schemas/EmploymentType' } }
+        daily_cap: { type: integer, minimum: 1, maximum: 20, default: 5 }
+        paused_until: { type: [string, 'null'], format: date-time }
+
+    LocationScope:
+      type: string
+      enum: [worldwide, unspecified, restricted]
+      description: '`unspecified` shows as "Unspecified location".'
+
+    EmploymentType:
+      type: string
+      enum: [full_time, part_time, contract, freelance, internship, graduate, temporary]
+
+    Pay:
+      type: object
+      properties:
+        min_minor: { type: [integer, 'null'] }
+        max_minor: { type: [integer, 'null'] }
+        currency: { type: [string, 'null'] }
+        period: { type: [string, 'null'], enum: [hour, day, week, month, year, project, null] }
+
+    JobSummary:
+      type: object
+      required: [id, title, company_name, location_scope, trust, source]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        company_name: { type: string }
+        location_scope: { $ref: '#/components/schemas/LocationScope' }
+        allowed_countries: { type: array, items: { type: string } }
+        allowed_regions: { type: array, items: { type: string } }
+        employment_type: { oneOf: [{ $ref: '#/components/schemas/EmploymentType' }, { type: 'null' }] }
+        pay: { $ref: '#/components/schemas/Pay' }
+        trust: { type: string, enum: [verified_employer, careers_page, unverified] }
+        badges: { type: array, items: { type: string, enum: [new_today, closes_soon, internship, grad_friendly, side_gig, high_competition] } }
+        first_seen_at: { type: string, format: date-time }
+        original_posted_at: { type: [string, 'null'], format: date-time }
+        deadline_at: { type: [string, 'null'], format: date-time }
+        match_score: { type: [integer, 'null'], description: Only for signed-in members. }
+        source:
+          type: object
+          description: Show `credit` and link to `url` whenever `credit` is set.
+          properties:
+            key: { type: string }
+            credit: { type: [string, 'null'], examples: ['via Himalayas'] }
+            url: { type: [string, 'null'], format: uri }
+        apply:
+          type: object
+          properties:
+            method: { type: string, enum: [on_platform, email, ats_api, external_link] }
+            url: { type: [string, 'null'], format: uri, description: When the member must apply on another site. Use it unchanged. }
+            autopilot_eligible: { type: boolean }
+
+    JobDetail:
+      allOf:
+        - { $ref: '#/components/schemas/JobSummary' }
+        - type: object
+          properties:
+            description: { type: string }
+            summary: { type: [string, 'null'] }
+            skills: { type: array, items: { type: string } }
+            timezone_hours: { type: object, properties: { min_offset: { type: [integer, 'null'] }, max_offset: { type: [integer, 'null'] } } }
+            seniority: { type: [string, 'null'] }
+            community: { type: [object, 'null'], properties: { name: { type: string } }, description: Set when a community posted it. }
+            status: { type: string, enum: [pending_review, live, expired, removed, scam], description: Only returned to the employer who posted it. }
+
+    Match:
+      type: object
+      required: [job, score, reasons, gaps, status]
+      properties:
+        job: { $ref: '#/components/schemas/JobSummary' }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        reasons: { type: array, items: { type: string }, examples: [['3 years in customer support', 'Hours fit your timezone', 'Open to applicants in Nigeria']] }
+        gaps:
+          type: array
+          items:
+            type: object
+            properties:
+              skill: { type: string, examples: [Zendesk] }
+              training: { oneOf: [{ $ref: '#/components/schemas/Training' }, { type: 'null' }] }
+        status: { type: string, enum: [new, seen, saved, dismissed, in_queue, applied] }
+        other_pathways: { type: array, items: { type: string }, description: Shown when no training covers a gap. }
+
+    QueueItem:
+      type: object
+      properties:
+        job: { $ref: '#/components/schemas/JobSummary' }
+        score: { type: integer }
+        why_in_queue: { type: string, enum: [unverified_employer, apply_on_source_site, outside_rules, autopilot_off, job_cap_reached] }
+        warning: { type: [string, 'null'], examples: ["We couldn't confirm this employer. Check the company before you apply."] }
+        pack_ready: { type: boolean }
+
+    ApplyPack:
+      type: object
+      required: [job_id, open_url]
+      properties:
+        job_id: { type: string, format: uuid }
+        tailored_cv_url: { type: [string, 'null'], format: uri, description: 'Signed link, valid 1 hour.' }
+        answers:
+          type: array
+          items:
+            type: object
+            properties:
+              question: { type: string }
+              draft: { type: string }
+        open_url: { type: string, format: uri, description: Where to apply. Unchanged when the source requires its own link. }
+        generated_at: { type: string, format: date-time }
+
+    ApplicationStatus:
+      type: string
+      enum: [scheduled, sending, sent, failed, cancelled, replied, interview, rejected, offer, hired, no_response]
+
+    Application:
+      type: object
+      required: [id, job, mode, channel, status]
+      properties:
+        id: { type: string, format: uuid }
+        job: { $ref: '#/components/schemas/JobSummary' }
+        mode: { type: string, enum: [autopilot, apply_queue, manual] }
+        channel: { type: string, enum: [on_platform, email_relay, ats_api, external] }
+        status: { $ref: '#/components/schemas/ApplicationStatus' }
+        scheduled_for: { type: string, format: date-time }
+        cancel_until: { type: [string, 'null'], format: date-time }
+        sent_at: { type: [string, 'null'], format: date-time }
+        last_reply: { type: [string, 'null'], enum: [interview, rejection, info_request, auto_reply, other, null] }
+        last_reply_at: { type: [string, 'null'], format: date-time }
+        open_checkin: { type: [object, 'null'], properties: { id: { type: string, format: uuid }, question: { type: string } } }
+
+    ApplicationDetail:
+      allOf:
+        - { $ref: '#/components/schemas/Application' }
+        - type: object
+          properties:
+            sent_copy:
+              type: object
+              description: Exactly what went out.
+              properties:
+                to: { type: string }
+                from: { type: string }
+                subject: { type: string }
+                body: { type: string }
+                attachments: { type: array, items: { type: string } }
+            events:
+              type: array
+              items:
+                type: object
+                properties:
+                  status: { $ref: '#/components/schemas/ApplicationStatus' }
+                  at: { type: string, format: date-time }
+
+    ApplicationTotals:
+      type: object
+      properties:
+        sent: { type: integer }
+        replies: { type: integer }
+        interviews: { type: integer }
+        offers: { type: integer }
+        in_queue: { type: integer }
+        scheduled: { type: integer }
+
+    DailySummary:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        sent: { type: array, items: { $ref: '#/components/schemas/Application' } }
+        scheduled_for_tomorrow: { type: integer, description: Waiting on sending limits or the AI budget. }
+        new_in_queue: { type: integer }
+        replies: { type: integer }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, examples: [interview_invite, daily_summary, trial_ending, profile_ready, payment_failed] }
+        title: { type: string }
+        body: { type: [string, 'null'] }
+        data: { type: object, additionalProperties: true }
+        read: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    FaqResult:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        question: { type: string }
+        answer: { type: string }
+        relevance: { type: number, minimum: 0, maximum: 1 }
+
+    Ticket:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        subject: { type: string }
+        category: { type: [string, 'null'] }
+        status: { type: string, enum: [open, bot_answered, waiting_human, resolved] }
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              author: { type: string, enum: [user, bot, staff] }
+              body: { type: string }
+              at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    OwnerApplication:
+      type: object
+      required: [legal_name, id_type, id_number, community_name, slug, proof_links, price, billing_period]
+      properties:
+        legal_name: { type: string }
+        id_type: { type: string, enum: [nin, passport, drivers_licence, voters_card] }
+        id_number: { type: string, writeOnly: true }
+        id_document_upload_id: { type: string }
+        bank_code: { type: string }
+        bank_account_number: { type: string, writeOnly: true }
+        community_name: { type: string }
+        slug: { type: string, pattern: '^[a-z0-9-]{3,40}$' }
+        description: { type: string }
+        proof_links: { type: array, minItems: 1, items: { type: string, format: uri }, description: WhatsApp or Telegram group links. }
+        claimed_member_count: { type: integer }
+        group_started_on: { type: string, format: date }
+        evidence_upload_ids: { type: array, items: { type: string } }
+        price: { $ref: '#/components/schemas/Money' }
+        billing_period: { type: string, enum: [monthly, quarterly, yearly] }
+        trial_enabled: { type: boolean, default: false }
+        approval_required: { type: boolean, default: false }
+
+    OwnerCommunity:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: [string, 'null'] }
+        status: { type: string, enum: [pending_review, active, suspended, banned] }
+        invite_code: { type: string, examples: [LTH-2048] }
+        join_url: { type: string, format: uri, examples: ['https://ijobs.example/join/lagos-tech'] }
+        job_finds_url: { type: string, format: uri }
+        price: { $ref: '#/components/schemas/Money' }
+        billing_period: { type: string, enum: [monthly, quarterly, yearly] }
+        platform_share_percent: { type: number }
+        trial_enabled: { type: boolean }
+        approval_required: { type: boolean }
+        demo_tours_left: { type: integer, minimum: 0, maximum: 2 }
+        strike_count: { type: integer }
+        verification: { type: string, enum: [pending, approved, rejected, needs_more_info] }
+
+    Funnel:
+      type: object
+      properties:
+        invited: { type: integer }
+        joined: { type: integer }
+        awaiting_approval: { type: integer }
+        not_paid_yet: { type: integer }
+        on_trial: { type: integer }
+        paid: { type: integer }
+        stuck_no_cv: { type: integer }
+        stuck_no_rules: { type: integer }
+        fully_set_up: { type: integer }
+        interviews_landed: { type: integer, description: Total across members; never per person. }
+
+    OwnerMember:
+      type: object
+      description: First name and progress only.
+      properties:
+        membership_id: { type: string, format: uuid }
+        first_name: { type: [string, 'null'] }
+        status: { type: string, enum: [pending_approval, pending_payment, trialing, active, past_due, expired, cancelled] }
+        onboarding_step: { type: string, enum: [joined, paid, cv_uploaded, rules_set, complete] }
+        joined_at: { type: string, format: date-time }
+        trial_ends_at: { type: [string, 'null'], format: date-time }
+        current_period_end: { type: [string, 'null'], format: date-time }
+        can_nudge: { type: boolean }
+
+    Invite:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        target_masked: { type: string, examples: ['+234 802 *** **02'] }
+        channel: { type: string, enum: [email, phone] }
+        status: { type: string, enum: [pending, sent, opened, joined, revoked] }
+        sent_at: { type: [string, 'null'], format: date-time }
+
+    CommunityJob:
+      type: object
+      required: [job, state, expires_at, can_renew]
+      properties:
+        job:
+          type: object
+          description: While `state` is `reading`, only `id` is set (it is the pasted post's id).
+          required: [id]
+          properties:
+            id: { type: string, format: uuid }
+            title: { type: string }
+            company_name: { type: string }
+            description: { type: string }
+            apply_url: { type: [string, 'null'] }
+            apply_email: { type: [string, 'null'] }
+        state: { type: string, enum: [reading, needs_confirmation, live, under_review, expired, removed] }
+        expires_at: { type: [string, 'null'], format: date-time }
+        can_renew: { type: boolean }
+
+    JobCorrections:
+      type: object
+      properties:
+        title: { type: string }
+        company_name: { type: string }
+        description: { type: string }
+        location_scope: { $ref: '#/components/schemas/LocationScope' }
+        allowed_countries: { type: array, items: { type: string } }
+        employment_type: { $ref: '#/components/schemas/EmploymentType' }
+        pay: { $ref: '#/components/schemas/Pay' }
+        apply_email: { type: string, format: email }
+        apply_url: { type: string, format: uri }
+        deadline_at: { type: string, format: date-time }
+
+    JobInput:
+      allOf:
+        - { $ref: '#/components/schemas/JobCorrections' }
+        - type: object
+          required: [title, description, location_scope]
+          properties:
+            skills: { type: array, items: { type: string } }
+            accept_on_platform: { type: boolean, default: true, description: Receive applications in i-jobs instead of by email or link. }
+            max_applicants: { type: [integer, 'null'], minimum: 1 }
+
+    Earnings:
+      type: object
+      properties:
+        balance: { $ref: '#/components/schemas/Money' }
+        on_hold: { $ref: '#/components/schemas/Money' }
+        next_payout_at: { type: [string, 'null'], format: date-time }
+        payouts: { type: array, items: { $ref: '#/components/schemas/Payout' } }
+
+    Payout:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        amount: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [held, ready, processing, paid, frozen, failed] }
+        hold_until: { type: string, format: date-time }
+        paid_at: { type: [string, 'null'], format: date-time }
+        frozen_reason: { type: [string, 'null'] }
+
+    CodeBatch:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        quantity: { type: integer }
+        unit_share: { $ref: '#/components/schemas/Money' }
+        total: { $ref: '#/components/schemas/Money' }
+        grants_period: { type: string, enum: [monthly, quarterly, yearly], description: OPEN. How long a code's access lasts. }
+        paid: { type: boolean }
+        unused: { type: integer }
+        redeemed: { type: integer }
+        void: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    Employer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        domain: { type: string }
+        verification: { type: string, enum: [unverified, pending, verified, revoked] }
+        checks:
+          type: object
+          properties:
+            work_email: { type: boolean }
+            website: { type: boolean }
+            registry: { type: boolean }
+
+    Integration:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        provider: { type: string, enum: [greenhouse, lever, ashby] }
+        board_token: { type: string }
+        key_last4: { type: string }
+        connected_at: { type: string, format: date-time }
+
+    Training:
+      type: object
+      required: [id, title, url]
+      properties:
+        id: { type: string }
+        title: { type: string, examples: ['Zendesk basics'] }
+        url: { type: string, format: uri }
+        skills: { type: array, items: { type: string } }
+        duration_minutes: { type: [integer, 'null'] }
+        is_free: { type: boolean }
+        suitable_for_minors: { type: boolean }
+
+    EventType:
+      type: string
+      enum: [application.status_changed, match.created, work.ready, membership.updated]
+
+    WebhookEndpoint:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        events: { type: array, items: { $ref: '#/components/schemas/EventType' } }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    WebhookEvent:
+      type: object
+      required: [id, type, created_at, site_user, data]
+      properties:
+        id: { type: string, format: uuid, description: Use to ignore repeats. }
+        type: { $ref: '#/components/schemas/EventType' }
+        created_at: { type: string, format: date-time }
+        site_user: { type: string, description: Your site's id for the user. }
+        data: { type: object }
+
+    ModerationItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        subject_type: { type: string, enum: [job, community, owner, employer, user] }
+        subject_id: { type: string, format: uuid }
+        reason_internal: { type: string, description: Staff only. Never shown to the poster. }
+        risk_score: { type: [number, 'null'] }
+        status: { type: string, enum: [open, in_review, approved, rejected, escalated] }
+        created_at: { type: string, format: date-time }
+        subject:
+          description: Staff only. What the item is about, in words, so a reviewer needn't look it up. Null if the subject is gone.
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [title, lines, links]
+              properties:
+                title: { type: string, examples: ['Junior Data Analyst at Paystack'] }
+                lines: { type: array, items: { type: string }, examples: [['Status: pending_review', 'Source: community_paste']] }
+                links: { type: array, items: { type: string, format: uri } }
+                text: { type: [string, 'null'], description: The job description or community description. }
+
+    OwnerStrike:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        reason: { type: string }
+        created_at: { type: string, format: date-time }
+        appeal: { type: [string, 'null'], enum: [pending, approved, rejected, needs_more_info, null], description: Null if not appealed. }
+        can_appeal: { type: boolean }
+
+    PaymentStatus:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        purpose: { type: string, enum: [membership, code_batch] }
+        status: { type: string, enum: [pending, succeeded, failed, refunded, reversed] }
+        amount: { $ref: '#/components/schemas/Money' }
+        community:
+          oneOf:
+            - type: 'null'
+            - type: object
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+        membership_id: { type: [string, 'null'], format: uuid }
+        code_batch_id: { type: [string, 'null'], format: uuid }
+        paid_at: { type: [string, 'null'], format: date-time }
+        failed: { type: [string, 'null'], description: 'Why it failed, in words.' }
+
+    EmployerDetail:
+      type: object
+      properties:
+        employer: { $ref: '#/components/schemas/Employer' }
+        role: { type: string }
+        integrations:
+          type: array
+          items: { $ref: '#/components/schemas/Integration' }
+        jobs:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              title: { type: string }
+              state: { type: string, enum: [live, in_review, closed, removed], description: In-review posts never say why. }
+              applicants: { type: integer }
+              max_applicants: { type: [integer, 'null'] }
+              apply_to: { type: [string, 'null'], description: The email or link applications go to. }
+              posted_at: { type: string, format: date-time }
+              expires_at: { type: string, format: date-time }
+
+    AdminPayout:
+      allOf:
+        - { $ref: '#/components/schemas/Payout' }
+        - type: object
+          properties:
+            reference: { type: [string, 'null'], description: The bank transfer reference finance entered. }
+            community:
+              type: object
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+            payee:
+              type: object
+              description: Finance only.
+              properties:
+                legal_name: { type: string }
+                bank_code: { type: [string, 'null'] }
+                account_last4: { type: [string, 'null'] }
+                identity_verified: { type: boolean }
+
+    SourceRulesInput:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        display: { type: string, enum: [full, job_finds_only, disabled] }
+        terms_status: { type: string, enum: [ok, needs_review, pending_reply, restricted, blocked] }
+        allow_paywall: { type: boolean }
+        allow_autopilot: { type: boolean }
+        allow_signup_gate: { type: boolean }
+        apply_via_source_link: { type: boolean }
+        requires_credit: { type: boolean }
+        credit_text: { type: [string, 'null'] }
+        fetch_interval_minutes: { type: integer, minimum: 5 }
+        max_fetches_per_day: { type: [integer, 'null'] }
+        notes: { type: [string, 'null'] }
+
+    Source:
+      allOf:
+        - { $ref: '#/components/schemas/SourceRulesInput' }
+        - type: object
+          properties:
+            key: { type: string }
+            name: { type: string }
+            kind: { type: string }
+            terms_url: { type: [string, 'null'], format: uri }
+            health:
+              type: object
+              properties:
+                last_run_at: { type: [string, 'null'], format: date-time }
+                last_run_ok: { type: [boolean, 'null'] }
+                jobs_live: { type: integer }
+                failures_in_a_row: { type: integer }
+
+    AiBudgetRow:
+      type: object
+      properties:
+        task: { type: string, enum: [job_extract, scam_check, cv_parse, app_paragraph, reply_sort, apply_pack, support_answer] }
+        model: { type: string }
+        daily_tokens: { type: integer }
+        spent_tokens: { type: integer }
+        remaining_tokens: { type: integer }
+        calls_left_estimate: { type: integer }

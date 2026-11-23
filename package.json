@@ -1,0 +1,21 @@
+{
+  "name": "ijobs-engine",
+  "private": true,
+  "description": "The job engine behind i-jobs by 99, Remote Hustle and School1.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "db:test": "npm --prefix db/tests install && npm --prefix db/tests test",
+    "api:lint": "npx --yes @redocly/cli@2.74.0 lint api/openapi.yaml --config api/redocly.yaml"
+  },
+  "overrides": {
+    "postcss": "8.5.32",
+    "sharp": "0.35.5"
+  }
+}

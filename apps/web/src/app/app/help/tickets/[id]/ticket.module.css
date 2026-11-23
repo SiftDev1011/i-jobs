@@ -1,0 +1,7 @@
+.thread{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.thread li{max-width:80%;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.thread p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}
+.mine{align-self:flex-end;background:var(--action-tint)}
+.theirs{align-self:flex-start;background:var(--soft);border:1px solid var(--line)}
+.who{font-size:12.5px;color:var(--mute)}
+@media (max-width:640px){ .thread li{max-width:92%} }

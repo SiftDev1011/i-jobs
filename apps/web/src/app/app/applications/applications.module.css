@@ -1,0 +1,17 @@
+.table{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.table li + li{border-top:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--white)}
+.row:hover{background:var(--soft)}
+.job{flex:1;min-width:0;display:flex;flex-direction:column}
+.job b{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.job span{font-size:13px;color:var(--mute)}
+.meta{font-size:13px;color:var(--mute);white-space:nowrap}
+@media (max-width:700px){ .meta{display:none} }
+.timeline{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;border-left:2px solid var(--line);padding-left:14px}
+.timeline li{font-size:14px;position:relative}
+.timeline li::before{content:"";position:absolute;left:-20px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--white);border:2px solid var(--action)}
+.mail{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mailHead{background:var(--soft);padding:10px 14px;font-size:13.5px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px}
+.mailHead dt{color:var(--mute)}
+.mailHead dd{margin:0;overflow-wrap:anywhere}
+.mailBody{padding:14px}

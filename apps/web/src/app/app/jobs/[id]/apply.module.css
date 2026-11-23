@@ -1,0 +1,5 @@
+.answers{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px}
+.answers li{display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.q{font-weight:600;font-size:14px}
+.a{font-size:14px;color:var(--ink-2);white-space:pre-wrap;background:var(--soft);border-radius:8px;padding:10px}
+.answers :global(.btn){align-self:flex-start}

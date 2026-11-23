@@ -1,0 +1,123 @@
+# The beta engine on one Oracle Always Free ARM server (2 OCPU / 12 GB).
+#   cp infra/.env.example infra/.env   # fill it in
+#   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d
+# Nothing listens on a public port: Cloudflare Tunnel carries traffic to the API.
+
+name: ijobs
+
+x-engine: &engine
+  image: ${ENGINE_IMAGE:-ghcr.io/your-org/ijobs-engine:latest}
+  restart: unless-stopped
+  env_file: .env
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    migrate: { condition: service_completed_successfully }
+  logging: &logging
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ijobs
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - effective_cache_size=6GB
+      - -c
+      - maintenance_work_mem=512MB   # faster HNSW index builds
+      - -c
+      - work_mem=16MB
+      - -c
+      - max_connections=100
+      - -c
+      - wal_compression=on
+      - -c
+      - log_min_duration_statement=500
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/10-init-db.sh:ro
+    shm_size: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ijobs"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # BullMQ needs every key kept: never evict, and write to disk.
+    command: >
+      redis-server --appendonly yes --appendfsync everysec
+      --maxmemory 1gb --maxmemory-policy noeviction
+      --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    logging: *logging
+
+  # Runs once per deploy, as the table owner, then exits.
+  migrate:
+    image: ${ENGINE_IMAGE:-ghcr.io/your-org/ijobs-engine:latest}
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/ijobs
+      REDIS_URL: redis://unused
+    command: ["node", "dist/migrate.js", "--seed"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    logging: *logging
+
+  api:
+    <<: *engine
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgres://ijobs_app:${APP_DB_PASSWORD}@postgres:5432/ijobs
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    command: ["node", "dist/main.js"]
+    # Only the tunnel (and the host, for checks) can reach it.
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  worker:
+    <<: *engine
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://ijobs_app:${APP_DB_PASSWORD}@postgres:5432/ijobs
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    command: ["node", "dist/worker.js"]
+    healthcheck:
+      disable: true
+    stop_grace_period: 60s
+
+  cloudflared:
+    image: cloudflare/cloudflared:2025.11.1
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      - api
+    logging: *logging
+
+volumes:
+  pgdata:
+  redisdata:

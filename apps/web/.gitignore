@@ -1,0 +1,6 @@
+next-env.d.ts
+.next/
+.env*.local
+
+# Browser test output
+e2e/.out/

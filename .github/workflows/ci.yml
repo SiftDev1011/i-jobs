@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.1-pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_PG_ADMIN_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      TEST_REDIS_URL: redis://127.0.0.1:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: pdftotext (CV reading)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+      - run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck --workspace @ijobs/engine
+      - name: Build
+        run: npm run build --workspace @ijobs/engine
+      - name: Engine tests (real Postgres + Redis)
+        run: npm test --workspace @ijobs/engine
+      - name: Database tests (PGlite)
+        run: npm run db:test
+      - name: Lint the API spec
+        run: npm run api:lint
+      - name: Check the generated DB types match the migrations
+        run: |
+          cd apps/engine
+          DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/ijobs_test npm run db:types
+          git diff --exit-code -- src/db/schema.ts || (echo "Run 'npm run db:types' and commit src/db/schema.ts" && exit 1)
+
+  web:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.1-pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_ADMIN_URL: postgres://postgres:postgres@127.0.0.1:5432/ijobs
+      DATABASE_URL: postgres://ijobs_app:e2e@127.0.0.1:5432/ijobs
+      REDIS_URL: redis://127.0.0.1:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Database and app role
+        run: |
+          psql postgres://postgres:postgres@127.0.0.1:5432/postgres -c "CREATE DATABASE ijobs"
+          psql postgres://postgres:postgres@127.0.0.1:5432/postgres -c "CREATE ROLE ijobs_app LOGIN PASSWORD 'e2e' NOBYPASSRLS"
+      - name: Typecheck and unit tests
+        run: |
+          npm run typecheck --workspace @ijobs/web
+          npm test --workspace @ijobs/web
+      - name: Build the engine and the web app
+        run: |
+          npm run build --workspace @ijobs/engine
+          npm run build --workspace @ijobs/web
+      - name: Browser
+        run: npx --workspace @ijobs/web playwright install --with-deps chromium
+      - name: Browser tests (real engine, Postgres and Redis)
+        run: npm run e2e --workspace @ijobs/web
+      - name: Keep the report and traces if anything failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            apps/web/e2e/.out/report
+            apps/web/e2e/.out/results
+            apps/web/e2e/.out/engine.log
+          retention-days: 7
+
+  image:
+    needs: [test, web]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name (lowercase)
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/engine" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/engine/Dockerfile
+          # Oracle Always Free is ARM; x86 kept for laptops.
+          platforms: linux/arm64,linux/amd64
+          push: true
+          tags: |
+            ${{ steps.name.outputs.image }}:latest
+            ${{ steps.name.outputs.image }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

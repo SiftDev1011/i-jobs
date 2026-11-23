@@ -1,0 +1,17 @@
+node_modules/
+.storage/
+
+# Build output
+dist/
+coverage/
+*.tsbuildinfo
+
+# Real settings and keys: never commit these. The .env.example files are the templates.
+.env
+.env.*
+!.env.example
+
+# Editors and systems
+.DS_Store
+.idea/
+.vscode/

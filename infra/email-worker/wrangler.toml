@@ -1,0 +1,14 @@
+# Deploy:  cd infra/email-worker && npm install && npx wrangler deploy
+# Then:    npx wrangler secret put INBOUND_EMAIL_SECRET   (the same value as the engine's)
+# And in the Cloudflare dashboard: Email → Email Routing on the relay domain → Routing rules →
+#          Catch-all address → Action "Send to a Worker" → ijobs-email-worker.
+name = "ijobs-email-worker"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+[vars]
+ENGINE_URL = "https://api.ijobs.example"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "ijobs-files"

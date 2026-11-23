@@ -1,0 +1,8 @@
+# Lint settings for the i-jobs API spec.
+extends:
+  - recommended
+rules:
+  # Placeholder servers until the real domain is chosen.
+  no-server-example.com: off
+  # Many simple endpoints only fail with the shared 401/429 handled by the gateway.
+  operation-4xx-response: off

@@ -1,0 +1,9 @@
+.main{display:grid;place-items:center;padding:48px 16px 96px}
+.card{width:min(420px, 100%);display:flex;flex-direction:column;gap:8px}
+.h{font-size:clamp(28px, 4vw, 36px);line-height:1.1}
+.sub{color:var(--ink-2);margin-bottom:16px}
+.form{display:flex;flex-direction:column;gap:12px}
+.form :global(.input){margin-top:0}
+.code{font-size:24px;letter-spacing:.3em;font-weight:600;font-variant-numeric:tabular-nums}
+.sentTo{color:var(--ink-2)}
+.back{align-self:center}
