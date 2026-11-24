@@ -1,6 +1,6 @@
 /**
- * Cloudflare Email Worker for the relay domain (apply.ijobs.example).
- * Email Routing sends every message for *@apply.ijobs.example here. We keep the raw message in R2,
+ * Cloudflare Email Worker for the relay domain (remotehustle.name.ng).
+ * Email Routing sends every message for *@remotehustle.name.ng here. We keep the raw message in R2,
  * then tell the engine, which matches it to the member and the application and passes it on.
  * Nothing is forwarded from here: the engine decides who gets what.
  */

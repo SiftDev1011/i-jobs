@@ -104,7 +104,7 @@ describe('Communities and money', () => {
   it('paying through Paga activates the membership and splits the money in the ledger', async () => {
     await ctx.http().post(`/v1/memberships/${m1Membership}/checkout`).set(m1.auth).expect(400); // Idempotency-Key required
     const co = await ctx.http().post(`/v1/memberships/${m1Membership}/checkout`).set(m1.auth).set(idem()).expect(201);
-    expect(co.body).toMatchObject({ provider: 'paga', checkout_url: expect.stringContaining('checkout.invalid'), amount: { amount_minor: 1_000_000, currency: 'NGN' } });
+    expect(co.body).toMatchObject({ provider: 'paga', checkout_url: expect.stringMatching(/^\/demo-pay\//), amount: { amount_minor: 1_000_000, currency: 'NGN' } });
     expect(paga.fakeRequests.at(-1)).toMatchObject({ amountKobo: 1_000_000, callbackUrl: expect.stringMatching(/\/v1\/hooks\/paga$/) });
 
     const bad = paga.signCallback({ notificationId: 'x', statusCode: '0', externalReferenceNumber: co.body.reference, state: 'COMPLETE', outstandingBalance: null });
@@ -252,6 +252,17 @@ describe('Communities and money', () => {
     expect((await q(`SELECT balance_kobo::int AS b FROM owner_balances WHERE community_id = $1`, [community.id]))[0].b).toBe(0);
     expect(await q(`SELECT * FROM ledger_unbalanced`)).toEqual([]);
     expect((await ctx.http().get(`/v1/owner/communities/${community.id}/earnings`).set(owner.auth).expect(200)).body.payouts[0]).toMatchObject({ status: 'paid', amount: { amount_minor: 800_000 } });
+  });
+
+  it('demo payments: with fake Paga, the payer completes checkout on the web app\'s demo page', async () => {
+    expect((await ctx.http().get('/v1/features').expect(200)).body.demo_payments).toBe(true);
+    const buy = await ctx.http().post(`/v1/owner/communities/${community.id}/code-batches`).set(owner.auth).set(idem()).send({ quantity: 1, accept_terms: true }).expect(201);
+    const id = buy.body.checkout.payment_id;
+    expect(buy.body.checkout.checkout_url).toBe(`/demo-pay/${id}`);
+    expect((await ctx.http().post(`/v1/dev/demo-payments/${id}/complete`).set(m1.auth).expect(404)).body.code).toBe('payment_not_found');
+    expect((await ctx.http().post(`/v1/dev/demo-payments/${id}/complete`).set(owner.auth).expect(200)).body).toMatchObject({ id, purpose: 'code_batch', status: 'succeeded' });
+    await ctx.http().post(`/v1/dev/demo-payments/${id}/complete`).set(owner.auth).expect(200); // twice is safe
+    expect(await q(`SELECT account, amount_kobo::int AS kobo FROM ledger_entries WHERE payment_id = $1 ORDER BY account::text`, [id])).toEqual([{ account: 'cash', kobo: 200_000 }, { account: 'platform_revenue', kobo: -200_000 }]);
   });
 
   it('a ban voids unused codes; members keep access until their period ends, then get a switch offer', async () => {

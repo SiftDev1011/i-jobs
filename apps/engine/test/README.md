@@ -23,7 +23,7 @@ role if missing, applies every migration and seed, and sets known site keys for 
 School1 (`env.ts`). The app connects as `ijobs_app`, exactly as in production, so row-level security
 is really tested.
 
-## What's covered (201 tests)
+## What's covered (202 tests)
 
 - **Sign-in:** email and phone codes; wrong code; lock after five tries; codes work once; rate limits
   with `Retry-After`; field-by-field validation; refresh rotation; reuse of an old refresh token ends

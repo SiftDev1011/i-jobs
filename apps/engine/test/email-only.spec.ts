@@ -25,7 +25,7 @@ describe('Running without texts (SMS_DRIVER=none)', () => {
   beforeEach(() => flushRateLimits(ctx));
 
   it('says what is off, so apps can hide it', async () => {
-    expect((await ctx.http().get('/v1/features').expect(200)).body).toEqual({ phone_sign_in: false, phone_invites: false, free_weeks: false });
+    expect((await ctx.http().get('/v1/features').expect(200)).body).toEqual({ phone_sign_in: false, phone_invites: false, free_weeks: false, demo_payments: true });
   });
 
   it('refuses phone sign-in; email still works', async () => {

@@ -93,7 +93,9 @@ paths:
       description: |
         Texts are optional. With `SMS_DRIVER=none` the engine runs email-only: no phone sign-in, no
         phone invites, and no free weeks (a free week is tied to a checked phone number). Apps read
-        this to hide what isn't available. Cached for a minute.
+        this to hide what isn't available. `demo_payments` is true only with the fake Paga driver
+        (development and demos; never in production): checkout is then the web app's `/demo-pay` page.
+        Cached for a minute.
       security: []
       responses:
         '200':
@@ -102,11 +104,12 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [phone_sign_in, phone_invites, free_weeks]
+                required: [phone_sign_in, phone_invites, free_weeks, demo_payments]
                 properties:
                   phone_sign_in: { type: boolean }
                   phone_invites: { type: boolean }
                   free_weeks: { type: boolean }
+                  demo_payments: { type: boolean }
 
   /auth/codes:
     post:
@@ -531,6 +534,26 @@ paths:
               schema: { $ref: '#/components/schemas/PaymentStatus' }
         '404':
           description: Not one of this person's payments. `code` is `payment_not_found`.
+
+  /dev/demo-payments/{paymentId}/complete:
+    post:
+      tags: [Joining]
+      operationId: completeDemoPayment
+      summary: Complete a demo payment (development only)
+      description: |
+        Only with the fake Paga driver (`demo_payments` in `/features`; never in production). Plays
+        Paga's part: a signed success callback through the same code a real payment takes. Completing
+        a payment that already went through changes nothing.
+      parameters:
+        - { name: paymentId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: The payment as it now stands
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentStatus' }
+        '404':
+          description: Demo payments are off (`not_found`), or not one of this person's payments (`payment_not_found`).
 
   /memberships/{membershipId}/checkout:
     post:

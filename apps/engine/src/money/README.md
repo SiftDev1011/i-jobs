@@ -29,6 +29,11 @@ outstandingBalance + hash key), and only a pending payment can succeed, once. Th
 
 Unused payment links fail after 7 days.
 
+**Demo payments.** With `PAGA_DRIVER=fake` (development and demos; refused in production) the
+checkout link is the web app's `/demo-pay/<payment id>` page. Its button calls
+`POST /v1/dev/demo-payments/{id}/complete`, which sends a correctly signed success callback through the
+same code as a real payment. `GET /v1/features` says `demo_payments: true` so apps know.
+
 **Before going live, in Paga's sandbox (`PAGA_BASE_URL=https://beta-collect.paga.com`):** the docs
 don't say which key is the Basic-auth user (we send `publicKey:secretKey`) or how empty optional
 fields enter the request hash (we use empty strings). Make one test payment end to end; if Paga

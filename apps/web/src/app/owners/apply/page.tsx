@@ -36,7 +36,7 @@ export default async function OwnersApply() {
         <h2 className={p.h2}>How it works</h2>
         <ol className={p.steps}>
           <li><b>Apply</b><p>Tell us about you and your group. A person checks it within two working days.</p></li>
-          <li><b>Share your link</b><p>Post your join link or invite code in the group, or send invites by email and text from your dashboard.</p></li>
+          <li><b>Share your link</b><p>Post your join link or invite code in the group, or send invites by {f.phone_invites ? 'email and text' : 'email'} from your dashboard.</p></li>
           <li><b>Members get hired</b><p>They upload a CV once; i-jobs matches and applies. You see who’s set up and how many interviews they land.</p></li>
         </ol>
       </section>

@@ -15,7 +15,9 @@ export interface paths {
          * What this engine offers
          * @description Texts are optional. With `SMS_DRIVER=none` the engine runs email-only: no phone sign-in, no
          *     phone invites, and no free weeks (a free week is tied to a checked phone number). Apps read
-         *     this to hide what isn't available. Cached for a minute.
+         *     this to hide what isn't available. `demo_payments` is true only with the fake Paga driver
+         *     (development and demos; never in production): checkout is then the web app's `/demo-pay` page.
+         *     Cached for a minute.
          *
          */
         get: operations["getFeatures"];
@@ -348,6 +350,29 @@ export interface paths {
         get: operations["getPayment"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/demo-payments/{paymentId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete a demo payment (development only)
+         * @description Only with the fake Paga driver (`demo_payments` in `/features`; never in production). Plays
+         *     Paga's part: a signed success callback through the same code a real payment takes. Completing
+         *     a payment that already went through changes nothing.
+         *
+         */
+        post: operations["completeDemoPayment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2902,6 +2927,7 @@ export interface operations {
                         phone_sign_in: boolean;
                         phone_invites: boolean;
                         free_weeks: boolean;
+                        demo_payments: boolean;
                     };
                 };
             };
@@ -3466,6 +3492,35 @@ export interface operations {
                 };
             };
             /** @description Not one of this person's payments. `code` is `payment_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    completeDemoPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The payment as it now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentStatus"];
+                };
+            };
+            /** @description Demo payments are off (`not_found`), or not one of this person's payments (`payment_not_found`). */
             404: {
                 headers: {
                     [name: string]: unknown;

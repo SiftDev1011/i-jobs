@@ -7,7 +7,7 @@ They run on every push in CI (the `web` job in `.github/workflows/ci.yml`).
 |---|---|
 | `public.spec.ts` | Landing search, job search and job page, finding a community, invite codes, help, the explainer and content pages, no prices outside join pages, 404s, signed-out redirects |
 | `member.spec.ts` | One new member start to finish: invite code → sign up → join → free week (texted code) → CV upload → profile → autopilot → matches → report a job → cancel an application → notifications → help and a ticket → data export → kept out of owner and staff pages → log out |
-| `owner.spec.ts` | The demo owner: dashboard, demo tour link, first names only, reminders, invites, check and publish a pasted job, buy Selar codes through (fake) Paga, the payment page, the CSV download, earnings, settings |
+| `owner.spec.ts` | The demo owner: dashboard, demo tour link, first names only, reminders, invites, check and publish a pasted job, buy Selar codes through the demo checkout, the payment page, the CSV download, earnings, settings |
 | `employer-staff.spec.ts` | A new owner applies (and a too-low price is refused); a company verifies and posts (free email refused); a staff admin approves the community, the registration and the job, takes a job down and answers a ticket; a moderator only sees their tabs |
 | `phone.spec.ts` | On a Pixel 7 screen: no page scrolls sideways (public, owner and staff pages), the hero search fits, bottom tabs and the More sheet work |
 

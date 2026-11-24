@@ -46,6 +46,7 @@ The browser never calls the engine and never sees a token or site key.
 | `/about`, `/privacy`, `/terms` | Rendered from `content/*.md`. **Replace `privacy.md` and `terms.md` with your own lawyer-reviewed text**; a `> DRAFT:` line shows a yellow notice until you remove it. Keep the `{#owners}` and `{#employers}` anchors. |
 | `/demo/[token]` | An owner's demo tour link: a read-only member view with sample data, for a day |
 | `/payments/[id]` | Where Paga sends the payer back. Waits for the webhook, then says what's next (membership or Selar codes). |
+| `/demo-pay/[id]` | Development and demos only: stands in for Paga's checkout when the engine runs fake payments (`demo_payments` in `/v1/features`). A 404 everywhere else. |
 | `/owner` | Redirects to `/app/owner` (emails link here) |
 
 **Members (`/app`, signed in).** A sidebar on desktop; on phones, a top bar and bottom tabs.

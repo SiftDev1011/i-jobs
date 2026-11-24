@@ -7,7 +7,7 @@ main = "src/index.js"
 compatibility_date = "2025-06-01"
 
 [vars]
-ENGINE_URL = "https://api.ijobs.example"
+ENGINE_URL = "https://ijobs-api.remotehustle.name.ng"
 
 [[r2_buckets]]
 binding = "FILES"

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { DEMO, errorsOf, one, payWithFakePaga, signedInPage, sql, tag } from './helpers';
+import { DEMO, errorsOf, one, signedInPage, sql, tag } from './helpers';
 
 /** The demo owner (Tunde) runs Lagos Tech Hustlers. Steps share one signed-in page. */
 test.describe.serial('a community owner', () => {
@@ -74,15 +74,17 @@ test.describe.serial('a community owner', () => {
     await page.fill('#quantity', '3');
     await expect(page.getByText(/You pay ₦/)).toBeVisible();
     await page.locator('input[name=accept_terms]').check({ force: true });
-    // Paga's checkout is fake in tests; stand in for it.
-    await page.route('https://checkout.invalid/**', (r) => r.fulfill({ contentType: 'text/html', body: '<h1>Fake Paga checkout</h1>' }));
+    // With fake Paga, checkout is the web app's demo page.
     await page.getByRole('button', { name: 'Pay with Paga' }).click();
-    await expect(page.getByRole('heading', { name: 'Fake Paga checkout' })).toBeVisible();
+    await page.waitForURL(/\/demo-pay\//);
+    await expect(page.getByRole('heading', { name: /^Pay ₦/ })).toBeVisible();
+    await expect(page.getByText(/no money moves/)).toBeVisible();
 
     const pay = await one<{ id: string }>(`SELECT id FROM payments WHERE purpose = 'code_batch' AND community_id = $1 ORDER BY created_at DESC LIMIT 1`, [DEMO.lagos]);
     await page.goto(`/payments/${pay.id}`);
     await expect(page.getByText('Checking your payment')).toBeVisible();
-    await payWithFakePaga(pay.id);
+    await page.goto(`/demo-pay/${pay.id}`);
+    await page.getByRole('button', { name: 'Pay (demo)' }).click();
     await expect(page.getByRole('heading', { name: 'Your codes are ready' })).toBeVisible({ timeout: 15_000 });
     await page.getByRole('link', { name: 'Get the codes' }).click();
 

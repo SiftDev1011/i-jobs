@@ -54,7 +54,8 @@ export class PagaClient {
   async requestPayment(r: PaymentRequest): Promise<PaymentLink> {
     if (this.config.PAGA_DRIVER === 'fake') {
       this.fakeRequests.push(r);
-      return { checkoutUrl: `https://checkout.invalid/pay/${r.reference}`, providerRef: r.reference, raw: { fake: true } };
+      // The web app's demo checkout (a relative link, so it works at any address the app is served from).
+      return { checkoutUrl: `/demo-pay/${r.reference}`, providerRef: r.reference, raw: { fake: true } };
     }
     const body = {
       referenceNumber: r.reference,

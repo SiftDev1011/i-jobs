@@ -29,7 +29,8 @@ In the Oracle console, make sure the VCN security list only allows port 22 inbou
 
 1. Cloudflare dashboard → Zero Trust → Networks → Tunnels → **Create a tunnel** (Cloudflared).
 2. Copy the token into `CLOUDFLARE_TUNNEL_TOKEN` in `infra/.env`.
-3. Public hostname: `api.<your-domain>` → service `http://api:3000`.
+3. Public hostname: `ijobs-api.remotehustle.name.ng` → service `http://api:3000`.
+   (Not `api.i-jobs.…`: Cloudflare's free certificate only covers one level below `remotehustle.name.ng`.)
 
 The tunnel container connects out to Cloudflare, so nothing listens publicly.
 
@@ -91,23 +92,28 @@ the rule for every migration we write.
 2. Browsers upload CVs straight to the bucket, so it needs a CORS rule (bucket → Settings → CORS policy):
 
 ```json
-[{ "AllowedOrigins": ["https://ijobs.example", "https://remotehustle.example", "https://school1.example"],
+[{ "AllowedOrigins": ["https://i-jobs.remotehustle.name.ng", "https://remotehustle.plug99.com.ng"],
    "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type", "content-length"], "MaxAgeSeconds": 3600 }]
 ```
 
 The upload link only accepts the exact file type and size the member declared, and expires in 15 minutes.
 
-## 7. The relay domain (autopilot email)
+## 7. Email (Amazon SES + Cloudflare Email Routing)
 
-Autopilot sends from members' relay addresses on their own domain (e.g. `apply.ijobs.example`),
-separate from account email, so a problem with one never affects the other.
+Account email (sign-in codes, notifications) sends from `mail.i-jobs.remotehustle.name.ng`. Autopilot sends
+from members' relay addresses on the main domain, e.g. `ada.k3x9p2@remotehustle.name.ng`, and employers'
+replies come back to them. The relay is on the main domain because Cloudflare's catch-all routing rule only
+works there, not on subdomains.
 
-1. **SES:** verify the domain with Easy DKIM, set a custom MAIL FROM, and add SPF and DMARC
-   (`v=DMARC1; p=quarantine; rua=mailto:dmarc@ijobs.example`). Create the configuration set
+1. **SES** (region Europe (Ireland)): create a domain identity for each of `mail.i-jobs.remotehustle.name.ng`
+   and `remotehustle.name.ng` with Easy DKIM and a custom MAIL FROM (`bounce.`), and add the records it lists
+   in Cloudflare, all DNS only. Add one DMARC record on the main domain (it covers subdomains):
+   `_dmarc` TXT `v=DMARC1; p=quarantine; rua=mailto:dmarc@remotehustle.name.ng`. Create the configuration set
    `ijobs-relay` with an event destination for Bounce and Complaint to an SNS topic, and subscribe
-   `https://api.<domain>/v1/hooks/ses` (HTTPS) to it. The engine confirms the subscription itself.
+   `https://ijobs-api.remotehustle.name.ng/v1/hooks/ses` (HTTPS) to it. The engine confirms the subscription itself.
    Put the topic ARN in `SES_SNS_TOPIC_ARNS`. Do the same for the account configuration set.
-2. **Receiving:** turn on Cloudflare Email Routing for the relay domain, then deploy the worker:
+2. **Receiving:** turn on Cloudflare Email Routing for `remotehustle.name.ng`. Add a custom address
+   `dmarc@remotehustle.name.ng` that forwards to your own inbox, then deploy the worker:
 
 ```bash
 cd infra/email-worker && npm install
@@ -116,6 +122,7 @@ npx wrangler secret put INBOUND_EMAIL_SECRET    # the same value as the engine's
 ```
 
    In Email Routing → Routing rules, set the catch-all to "Send to a Worker" → `ijobs-email-worker`.
+   Specific addresses (like `dmarc@`) still win over the catch-all.
 3. **Warm-up:** `sending_domains.daily_limit` starts at 50. Raise it slowly (for example 50 → 100
    → 200 a week) while bounces stay under 2% and complaints under 0.1%.
 
