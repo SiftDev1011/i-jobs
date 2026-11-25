@@ -184,9 +184,9 @@ await test('Ledger: each money event balances to zero', async () => {
                          select $1, $2, id, 'membership', 600000, 'PAGA-1', 'succeeded', now() from memberships where user_id = $1 and community_id = $2 returning id`, [ada.id, comm.id])
   const txn = '00000000-0000-0000-0000-000000000001'
   await db.query(`insert into ledger_entries (txn_id, account, payment_id, community_id, amount_kobo) values
-    ($1, 'cash', $2, null, -600000),
-    ($1, 'platform_revenue', $2, null, 150000),
-    ($1, 'owner_payable', $2, $3, 450000)`, [txn, pay.id, comm.id])
+    ($1, 'cash', $2, null, 600000),
+    ($1, 'platform_revenue', $2, null, -150000),
+    ($1, 'owner_payable', $2, $3, -450000)`, [txn, pay.id, comm.id]) // debits positive, credits negative, as the engine writes them
   assert.equal(Number((await one(`select count(*) c from ledger_unbalanced`)).c), 0)
   assert.equal(Number((await one(`select balance_kobo from owner_balances where community_id = $1`, [comm.id])).balance_kobo), 450000)
 })
