@@ -35,6 +35,8 @@ export async function startCheckout(form: FormData): Promise<void> {
   const r = await api.POST('/memberships/{membershipId}/checkout', {
     params: { path: { membershipId: id }, header: { 'Idempotency-Key': randomUUID() } },
   });
+  // Payments switched off since the page loaded: back to the page, which now says so.
+  if ((r.error as { code?: string } | undefined)?.code === 'payments_off') redirect(`/app/membership/${id}`);
   const c = must(r);
   redirect(c.checkout_url);
 }

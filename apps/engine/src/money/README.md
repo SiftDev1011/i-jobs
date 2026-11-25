@@ -29,6 +29,11 @@ outstandingBalance + hash key), and only a pending payment can succeed, once. Th
 
 Unused payment links fail after 7 days.
 
+**Payments not set up yet.** With `PAGA_DRIVER=off` (allowed in production, no keys needed) the
+engine runs normally but both checkouts (membership and Selar codes) answer 503 `payments_off` before
+creating anything, Paga callbacks are refused, and `GET /v1/features` says `payments: false` so the web
+app shows "payments open soon" instead of a pay button.
+
 **Demo payments.** With `PAGA_DRIVER=fake` (development and demos; refused in production) the
 checkout link is the web app's `/demo-pay/<payment id>` page. Its button calls
 `POST /v1/dev/demo-payments/{id}/complete`, which sends a correctly signed success callback through the

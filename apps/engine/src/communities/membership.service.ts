@@ -148,6 +148,7 @@ export class MembershipService {
     if (m.status === 'pending_approval') throw Problem.forbidden('awaiting_approval', 'Waiting for the community to let you in');
     if (m.community_status !== 'active') throw Problem.conflict('community_not_active', 'This community is not taking payments');
     if (m.status === 'cancelled') throw Problem.conflict('membership_cancelled', 'Join again to pay');
+    this.owners.assertPaymentsOn();
     const user = await this.db.k.selectFrom('users').select(['email', 'phone', 'full_name']).where('id', '=', userId).executeTakeFirstOrThrow();
     const payment = await this.db.asEngine((trx) =>
       trx.insertInto('payments').values({ user_id: userId, community_id: m.community_id, membership_id: membershipId, purpose: 'membership', amount_kobo: m.price_kobo }).returning(['id', 'amount_kobo']).executeTakeFirstOrThrow(),

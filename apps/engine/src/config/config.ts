@@ -84,7 +84,8 @@ const schema = z
     /** Money is paid out only once it's this old (chargebacks), and only above the minimum. */
     PAYOUT_HOLD_DAYS: z.coerce.number().int().min(0).max(60).default(7),
     PAYOUT_MINIMUM_KOBO: z.coerce.number().int().positive().default(500000),
-    PAGA_DRIVER: z.enum(['paga', 'fake']).default('fake'),
+    // off = payments not set up yet (e.g. while Paga reviews the account): everything else runs, checkouts say "payments open soon".
+    PAGA_DRIVER: z.enum(['paga', 'fake', 'off']).default('fake'),
     PAGA_BASE_URL: z.string().default('https://beta-collect.paga.com'),
     PAGA_PUBLIC_KEY: z.string().optional(),
     PAGA_SECRET_KEY: z.string().optional(),

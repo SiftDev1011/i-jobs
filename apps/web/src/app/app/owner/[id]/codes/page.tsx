@@ -1,4 +1,4 @@
-import { engine, must } from '@/lib/engine';
+import { engine, features, must } from '@/lib/engine';
 import { amount, dateLabel } from '@/lib/format';
 import { PERIOD_LABEL } from '@/lib/labels';
 import u from '../../../_ui/ui.module.css';
@@ -9,6 +9,7 @@ export default async function Codes({ params }: { params: Promise<{ id: string }
   const { id } = await params;
   const c = await loadCommunity(id);
   const batches = must(await (await engine()).GET('/owner/communities/{communityId}/code-batches', { params: { path: { communityId: id } } }));
+  const { payments } = await features();
   const unit = Math.round(((c.price?.amount_minor ?? 0) * (c.platform_share_percent ?? 0)) / 100);
 
   return (
@@ -20,7 +21,11 @@ export default async function Codes({ params }: { params: Promise<{ id: string }
           {c.billing_period ? ` (${PERIOD_LABEL[c.billing_period] ?? c.billing_period})` : ''}, so whatever you charge above that is yours straight away.
           Buyers enter the code on your join page.
         </p>
-        <div className={u.card}>{c.status === 'active' ? <CodesForm id={id} unitMinor={unit} /> : <p className={u.muted}>Codes are available once {c.name} is approved.</p>}</div>
+        <div className={u.card}>
+          {c.status !== 'active' ? <p className={u.muted}>Codes are available once {c.name} is approved.</p>
+            : payments ? <CodesForm id={id} unitMinor={unit} />
+            : <p className={u.muted}>Payments open soon. You can buy codes as soon as our payment setup is finished.</p>}
+        </div>
       </section>
       <section className={u.section}>
         <h2 className={u.h2}>Your batches</h2>

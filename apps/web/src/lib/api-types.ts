@@ -17,6 +17,8 @@ export interface paths {
          *     phone invites, and no free weeks (a free week is tied to a checked phone number). Apps read
          *     this to hide what isn't available. `demo_payments` is true only with the fake Paga driver
          *     (development and demos; never in production): checkout is then the web app's `/demo-pay` page.
+         *     `payments` is false while payments aren't set up yet (`PAGA_DRIVER=off`): checkouts answer 503
+         *     `payments_off`, and apps should say payments open soon instead of showing a pay button.
          *     Cached for a minute.
          *
          */
@@ -2928,6 +2930,7 @@ export interface operations {
                         phone_invites: boolean;
                         free_weeks: boolean;
                         demo_payments: boolean;
+                        payments: boolean;
                     };
                 };
             };
@@ -3554,6 +3557,15 @@ export interface operations {
             };
             /** @description Waiting for the owner's approval (`code` is `awaiting_approval`). */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payments aren't set up yet (`code` is `payments_off`). Nothing was created; try again later. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5143,6 +5155,15 @@ export interface operations {
                         batch?: components["schemas"]["CodeBatch"];
                         checkout?: components["schemas"]["Checkout"];
                     };
+                };
+            };
+            /** @description Payments aren't set up yet (`code` is `payments_off`). Nothing was created; try again later. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

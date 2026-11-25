@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { startCheckout } from '@/app/actions/membership';
-import { currentUser, engine, must } from '@/lib/engine';
+import { currentUser, engine, features, must } from '@/lib/engine';
 import { money } from '@/lib/format';
 import u from '../../_ui/ui.module.css';
 import { TrialForm } from './trial-form';
@@ -17,6 +17,8 @@ export default async function MembershipPage({ params }: { params: Promise<{ id:
   if (!m) notFound();
   const join = m.community.slug ? (await api.GET('/join/{code}', { params: { path: { code: m.community.slug } } })).data : null;
   const price = join?.price ? money(join.price.amount_minor, join.price.currency) : null;
+  const { payments } = await features();
+  const soon = <p className={u.notice}>Payments open soon. We&rsquo;re finishing our payment setup; check back in a few days.</p>;
 
   if (m.status === 'pending_approval') {
     return (
@@ -32,7 +34,7 @@ export default async function MembershipPage({ params }: { params: Promise<{ id:
       <main className={u.page}>
         <h1 className={u.h1}>{m.community.name}</h1>
         <p className={`${u.notice} ${u.good}`}>You&rsquo;re in{m.status === 'trialing' ? ' on your free week' : ''}{m.current_period_end ? ` until ${new Date(m.current_period_end).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos',  day: 'numeric', month: 'long' })}` : ''}.</p>
-        {m.status === 'trialing' && (
+        {m.status === 'trialing' && payments && (
           <form action={startCheckout}><input type="hidden" name="membership" value={m.id} /><button className="btn btn-green">Pay now{price ? ` (${price})` : ''}</button></form>
         )}
         <Link className="btn btn-plain btn-sm" href="/app">Back home</Link>
@@ -50,7 +52,7 @@ export default async function MembershipPage({ params }: { params: Promise<{ id:
         <section className={u.card}>
           <h2 className={u.h2}>Pay your membership</h2>
           <p className={u.muted}>{price ? `${price} a month, paid securely through Paga (card, transfer or USSD).` : 'Paid securely through Paga (card, transfer or USSD).'}</p>
-          <form action={startCheckout}><input type="hidden" name="membership" value={m.id} /><button className="btn btn-green btn-block">Pay{price ? ` ${price}` : ''}</button></form>
+          {payments ? <form action={startCheckout}><input type="hidden" name="membership" value={m.id} /><button className="btn btn-green btn-block">Pay{price ? ` ${price}` : ''}</button></form> : soon}
         </section>
         {join?.trial_available && m.status === 'pending_payment' && (
           <section className={u.card}>

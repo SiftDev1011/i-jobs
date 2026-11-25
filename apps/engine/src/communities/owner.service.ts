@@ -339,6 +339,7 @@ export class OwnerService {
   async buyCodes(userId: string, communityId: string, quantity: number) {
     const c = await this.owned(userId, communityId);
     if (c.status !== 'active') throw Problem.conflict('community_not_active', 'Codes are available once your community is verified');
+    this.paga.assertEnabled();
     const unit = Math.round((Number(c.price_kobo) * c.platform_share_bps) / 10_000);
     const owner = await this.db.k.selectFrom('users').select(['email', 'phone', 'full_name']).where('id', '=', userId).executeTakeFirstOrThrow();
     const { batch, payment } = await this.db.asEngine(async (trx) => {
@@ -423,6 +424,11 @@ export class OwnerService {
   }
 
   // ---------------------------------------------------------------- helpers
+
+  /** Refuses with 503 payments_off while PAGA_DRIVER=off. */
+  assertPaymentsOn() {
+    this.paga.assertEnabled();
+  }
 
   async startPayment(paymentId: string, amountKobo: number, payer: { name: string; email: string | null; phone: string | null }, description: string) {
     const expiresAt = new Date(Date.now() + 24 * 3600_000);

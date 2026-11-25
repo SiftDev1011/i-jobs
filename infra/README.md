@@ -105,7 +105,7 @@ from members' relay addresses on the main domain, e.g. `ada.k3x9p2@remotehustle.
 replies come back to them. The relay is on the main domain because Cloudflare's catch-all routing rule only
 works there, not on subdomains.
 
-1. **SES** (region Europe (Ireland)): create a domain identity for each of `mail.i-jobs.remotehustle.name.ng`
+1. **SES** (region Europe (Stockholm), eu-north-1): create a domain identity for each of `mail.i-jobs.remotehustle.name.ng`
    and `remotehustle.name.ng` with Easy DKIM and a custom MAIL FROM (`bounce.`), and add the records it lists
    in Cloudflare, all DNS only. Add one DMARC record on the main domain (it covers subdomains):
    `_dmarc` TXT `v=DMARC1; p=quarantine; rua=mailto:dmarc@remotehustle.name.ng`. Create the configuration set

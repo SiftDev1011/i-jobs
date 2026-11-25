@@ -72,8 +72,9 @@ export async function currentUser(): Promise<Schemas['Me'] | null> {
   return must(r);
 }
 
-export type Features = { phone_sign_in: boolean; phone_invites: boolean; free_weeks: boolean; demo_payments: boolean };
-const NO_TEXTS: Features = { phone_sign_in: false, phone_invites: false, free_weeks: false, demo_payments: false };
+export type Features = { phone_sign_in: boolean; phone_invites: boolean; free_weeks: boolean; demo_payments: boolean; payments: boolean };
+// If the engine can't be asked, assume payments are on: a checkout would still say so if they aren't.
+const NO_TEXTS: Features = { phone_sign_in: false, phone_invites: false, free_weeks: false, demo_payments: false, payments: true };
 
 let featuresCache: { at: number; value: Features } | null = null;
 

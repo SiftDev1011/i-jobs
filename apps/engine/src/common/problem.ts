@@ -38,6 +38,9 @@ export class Problem extends Error {
   static unprocessable(code: string, title: string, errors?: FieldError[]) {
     return new Problem(422, code, title, undefined, errors);
   }
+  static unavailable(code: string, title: string) {
+    return new Problem(503, code, title);
+  }
   static tooMany(retryAfterSeconds: number, title = 'Too many requests. Try again shortly.') {
     return new Problem(429, 'rate_limited', title, undefined, undefined, {
       'Retry-After': String(Math.max(1, Math.ceil(retryAfterSeconds))),

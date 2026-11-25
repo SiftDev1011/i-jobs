@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { safeEqual } from '../common/crypto';
+import { Problem } from '../common/problem';
 import { AppConfig, CONFIG } from '../config/config';
 
 /**
@@ -51,7 +52,18 @@ export class PagaClient {
 
   constructor(@Inject(CONFIG) private readonly config: AppConfig) {}
 
+  /** False with PAGA_DRIVER=off: payments aren't set up yet. */
+  get enabled(): boolean {
+    return this.config.PAGA_DRIVER !== 'off';
+  }
+
+  /** Call before creating anything a payment needs, so nothing is left half made. */
+  assertEnabled(): void {
+    if (!this.enabled) throw Problem.unavailable('payments_off', 'Payments open soon. Check back in a few days.');
+  }
+
   async requestPayment(r: PaymentRequest): Promise<PaymentLink> {
+    this.assertEnabled();
     if (this.config.PAGA_DRIVER === 'fake') {
       this.fakeRequests.push(r);
       // The web app's demo checkout (a relative link, so it works at any address the app is served from).
@@ -95,7 +107,7 @@ export class PagaClient {
 
   /** SHA-512 of notificationId + statusCode + externalReferenceNumber + state + outstandingBalance (2 dp, omitted if null) + hash key. */
   verifyCallback(c: PagaCallback): boolean {
-    if (!c?.hash || !c.notificationId || !c.externalReferenceNumber) return false;
+    if (!this.enabled || !c?.hash || !c.notificationId || !c.externalReferenceNumber) return false;
     const balance = c.outstandingBalance === null || c.outstandingBalance === undefined || c.outstandingBalance === '' ? '' : Number(c.outstandingBalance).toFixed(2);
     const expected = sha512(`${c.notificationId}${c.statusCode}${c.externalReferenceNumber}${c.state ?? ''}${balance}${this.config.PAGA_HASH_KEY ?? ''}`);
     return safeEqual(expected.toLowerCase(), String(c.hash).toLowerCase());

@@ -7,6 +7,7 @@ import { SmsService } from '../messaging/sms.service';
  * What this engine can do, so apps show only what works. Texts are optional (SMS_DRIVER=none):
  * without them there is no phone sign-in, no phone invites and no free weeks. `demo_payments` is on
  * only with the fake Paga driver (never in production): checkout is the web app's /demo-pay page.
+ * `payments` is false with PAGA_DRIVER=off (payments not set up yet): apps show "payments open soon".
  */
 @Controller('features')
 export class FeaturesController {
@@ -17,6 +18,6 @@ export class FeaturesController {
   @Header('Cache-Control', 'public, max-age=60')
   features() {
     const texts = this.sms.enabled;
-    return { phone_sign_in: texts, phone_invites: texts, free_weeks: texts, demo_payments: this.config.PAGA_DRIVER === 'fake' };
+    return { phone_sign_in: texts, phone_invites: texts, free_weeks: texts, demo_payments: this.config.PAGA_DRIVER === 'fake', payments: this.config.PAGA_DRIVER !== 'off' };
   }
 }
