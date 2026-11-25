@@ -31,7 +31,7 @@ describe('Ingest pipeline', () => {
   beforeAll(async () => {
     const mod = await Test.createTestingModule({ imports: [WorkerModule] }).compile();
     ctx = await mod.init();
-    db = new Pool({ connectionString: testDbUrl(), max: 2 });
+    db = new Pool({ connectionString: testDbUrl(), max: 2, options: '-c TimeZone=UTC' });
     ingest = ctx.get(IngestService);
     pipeline = ctx.get(PipelineService);
     upkeep = ctx.get(UpkeepService);

@@ -1,3 +1,4 @@
+import { isEmail } from '../common/email';
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { AiService, nextUtcMidnight } from '../ai/ai.service';
@@ -236,7 +237,7 @@ export class OwnerService {
     const clean = new Map<string, 'email' | 'phone'>();
     for (const raw of targets) {
       const t = raw.trim().toLowerCase();
-      if (/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(t)) clean.set(t, 'email');
+      if (isEmail(t)) clean.set(t, 'email');
       else if (this.sms.enabled && /^\+[1-9]\d{6,14}$/.test(t.replace(/[\s-]/g, ''))) clean.set(t.replace(/[\s-]/g, ''), 'phone');
       else invalid.push(raw);
     }

@@ -11,7 +11,7 @@ export default async function globalSetup() {
   const { migrate } = require(path.join(root, 'apps/engine/dist/migrate.js')) as { migrate: (o: object) => Promise<unknown> };
   await migrate({ url: E2E.databaseAdminUrl, migrationsDir: path.join(root, 'db/migrations'), seedsDir: path.join(root, 'db/seeds'), seed: true, log: () => {} });
 
-  const db = new Client({ connectionString: E2E.databaseAdminUrl });
+  const db = new Client({ connectionString: E2E.databaseAdminUrl, options: '-c TimeZone=UTC' });
   await db.connect();
   try {
     await db.query(readFileSync(path.join(root, 'db/seeds/dev/demo.sql'), 'utf8'));

@@ -12,9 +12,12 @@ import { ACCESS_COOKIE, REFRESH_COOKIE, REFRESH_DAYS, cookieOptions, safeNext } 
 export type FormState = { ok?: boolean; error?: string; field?: string; target?: string } | null;
 
 /** Lagos-style numbers become +234…; emails stay as they are. */
+const EMAIL = /^(?!\.)(?!.*\.\.)[^\s@]+(?<!\.)@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i;
+
 function normaliseTarget(raw: string): { target: string; channel: 'email' | 'sms' } | null {
   const v = raw.trim();
-  if (v.includes('@')) return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? { target: v.toLowerCase(), channel: 'email' } : null;
+  // Same rule as the engine: no trailing or doubled dots (phone keyboards and autofill add them), a real top-level domain.
+  if (v.includes('@')) return EMAIL.test(v) ? { target: v.toLowerCase(), channel: 'email' } : null;
   const digits = v.replace(/[\s()-]/g, '');
   if (/^0[789][01]\d{8}$/.test(digits)) return { target: `+234${digits.slice(1)}`, channel: 'sms' };
   if (/^\+\d{8,15}$/.test(digits)) return { target: digits, channel: 'sms' };

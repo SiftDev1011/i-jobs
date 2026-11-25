@@ -16,7 +16,7 @@ export const DEMO = {
 /** A unique bit for emails, slugs and numbers. */
 export const tag = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-const pool = new Pool({ connectionString: E2E.databaseAdminUrl, max: 2 });
+const pool = new Pool({ connectionString: E2E.databaseAdminUrl, max: 2, options: '-c TimeZone=UTC' });
 /** Runs SQL as the database owner (seeding and checking, never what the app does). */
 export async function sql<T = Record<string, unknown>>(text: string, params: unknown[] = []): Promise<T[]> {
   return (await pool.query(text, params)).rows as T[];

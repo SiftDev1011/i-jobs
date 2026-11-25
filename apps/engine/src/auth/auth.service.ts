@@ -1,3 +1,4 @@
+import { isEmail } from '../common/email';
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { AccountService, MeView } from '../account/account.service';
@@ -28,7 +29,7 @@ export function normaliseTarget(raw: string): Target {
   const value = raw.trim();
   if (value.includes('@')) {
     const email = value.toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!isEmail(email)) {
       throw Problem.badRequest('invalid_request', 'Enter a valid email address', [{ field: 'target', message: 'Enter a valid email address' }]);
     }
     return { kind: 'email', value: email };

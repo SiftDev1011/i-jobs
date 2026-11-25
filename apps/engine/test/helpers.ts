@@ -19,7 +19,7 @@ export interface TestCtx {
 export async function startApp(): Promise<TestCtx> {
   const app = await createApp({ logger: false });
   await app.init();
-  const admin = new Pool({ connectionString: testDbUrl(), max: 2 });
+  const admin = new Pool({ connectionString: testDbUrl(), max: 2, options: '-c TimeZone=UTC' });
   return {
     app,
     http: () => request(app.getHttpServer()),

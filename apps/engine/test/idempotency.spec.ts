@@ -47,7 +47,7 @@ describe('Idempotency-Key', () => {
     await app.init();
   });
   afterAll(async () => {
-    const admin = new Pool({ connectionString: testDbUrl() });
+    const admin = new Pool({ connectionString: testDbUrl(), options: '-c TimeZone=UTC' });
     await admin.query(`DELETE FROM idempotency_keys`);
     await admin.end();
     await app.close();

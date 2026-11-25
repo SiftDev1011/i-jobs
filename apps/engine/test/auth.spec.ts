@@ -74,6 +74,14 @@ describe('Sign-in', () => {
     expect(phone.body.errors[0].field).toBe('target');
   });
 
+  it('refuses addresses email services reject (a trailing or doubled dot), with a clear message', async () => {
+    for (const target of ['ada@gmail.com.', 'ada@gmail..com', 'ada.@gmail.com']) {
+      const res = await ctx.http().post('/v1/auth/codes').send({ target }).expect(400);
+      expect(res.body).toMatchObject({ code: 'invalid_request', errors: [{ field: 'target', message: 'Enter a valid email address' }] });
+    }
+    await ctx.http().post('/v1/auth/codes').send({ target: `first.last.${Date.now()}@mail.example.co.uk` }).expect(204);
+  });
+
   it('rotates refresh tokens and ends the session if an old one is reused', async () => {
     const s = await signIn(ctx);
     const r1 = await ctx.http().post('/v1/auth/refresh').send({ refresh_token: s.refresh }).expect(200);

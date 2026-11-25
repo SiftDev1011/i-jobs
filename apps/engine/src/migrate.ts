@@ -17,7 +17,7 @@ function dirFrom(envName: string, fallback: string): string {
 
 export async function migrate(opts: { url: string; migrationsDir: string; seedsDir?: string; seed?: boolean; log?: (m: string) => void }) {
   const log = opts.log ?? ((m: string) => console.log(m));
-  const client = new Client({ connectionString: opts.url });
+  const client = new Client({ connectionString: opts.url, options: '-c TimeZone=UTC' });
   await client.connect();
   try {
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (

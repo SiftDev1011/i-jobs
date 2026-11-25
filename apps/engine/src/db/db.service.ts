@@ -19,7 +19,9 @@ export class Db implements OnModuleDestroy {
   readonly k: Kysely<DB>;
 
   constructor(@Inject(CONFIG) config: AppConfig) {
-    this.pool = new Pool({ connectionString: config.DATABASE_URL, max: config.DB_POOL_MAX });
+    // Every connection works in UTC, so "today" in SQL (current_date) matches the engine's own UTC day
+    // whatever the server's timezone is set to.
+    this.pool = new Pool({ connectionString: config.DATABASE_URL, max: config.DB_POOL_MAX, options: '-c TimeZone=UTC' });
     this.k = new Kysely<DB>({ dialect: new PostgresDialect({ pool: this.pool }) });
   }
 
