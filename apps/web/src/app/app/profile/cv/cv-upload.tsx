@@ -29,11 +29,17 @@ export function CvUpload({ parsedAt, consented }: { parsedAt: string | null; con
     }
     const link = await cvUploadLink({ name: file.name, type: file.type, size: file.size });
     if (!link.ok) { setStage('error'); setMessage(link.error); return; }
+    let put: Response;
     try {
-      const put = await fetch(link.data!.upload_url, { method: 'PUT', body: file, headers: { 'content-type': file.type } });
-      if (!put.ok) throw new Error(String(put.status));
-    } catch {
-      setStage('error'); setMessage('The upload didn’t finish. Check your connection and try again.'); return;
+      put = await fetch(link.data!.upload_url, { method: 'PUT', body: file, headers: { 'content-type': file.type } });
+    } catch (e) {
+      // No answer at all: the connection dropped, or storage didn't allow this site (CORS).
+      console.error('CV upload: no response from storage', e);
+      setStage('error'); setMessage('The upload didn’t finish. Check your connection and try again. (No response from storage.)'); return;
+    }
+    if (!put.ok) {
+      console.error('CV upload: storage refused the file', put.status, await put.text().catch(() => ''));
+      setStage('error'); setMessage(`Our file storage turned the upload away (error ${put.status}). Try again in a moment; if it keeps happening, tell us.`); return;
     }
     setStage('reading');
     const work = await cvParse(link.data!.upload_id);
