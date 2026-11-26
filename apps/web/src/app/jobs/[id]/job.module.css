@@ -1,30 +1,26 @@
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:48px;padding-block:32px 96px;align-items:start}
-.main{min-width:0;display:flex;flex-direction:column;gap:16px}
+.wrap{padding-block:24px 96px;display:flex;flex-direction:column;gap:28px}
 .crumb{font-size:14px;color:var(--mute)}
-.crumb a:hover{color:var(--ink)}
-.head{display:flex;gap:16px;align-items:flex-start}
-.tile{width:52px;height:52px;border-radius:12px;font-size:17px}
-.h{font-size:clamp(26px, 3.4vw, 38px);line-height:1.12}
-.co{color:var(--ink-2);margin-top:4px}
-.tags{display:flex;flex-wrap:wrap;gap:6px}
-.desc{color:var(--ink-2);line-height:1.7;display:flex;flex-direction:column;gap:14px;margin-top:8px;overflow-wrap:anywhere}
-.desc ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
-.side{position:sticky;top:88px;display:flex;flex-direction:column;gap:12px}
-.box{border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;background:var(--white);box-shadow:0 1px 2px rgba(0,0,0,.03)}
-.pay{font-size:22px;font-weight:700;letter-spacing:-0.02em}
-.pay small{font-size:14px;font-weight:400;color:var(--mute)}
-.payNone{color:var(--mute)}
-.facts{margin:0;display:flex;flex-direction:column;gap:8px;font-size:14px}
-.facts div{display:flex;justify-content:space-between;gap:12px}
-.facts dt{color:var(--mute)}
-.facts dd{margin:0;font-weight:500;text-align:right}
+.crumb a:hover{color:var(--action)}
+/* Desktop: header and description on the left, the apply box beside them. Phones: header, apply box, description. */
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-areas:"head side" "body side";column-gap:48px;row-gap:28px;align-items:start}
+.headArea{grid-area:head;min-width:0}
+.body{grid-area:body;min-width:0;display:flex;flex-direction:column;gap:28px}
+.side{grid-area:side;position:sticky;top:88px;display:flex;flex-direction:column;gap:12px}
+.sec{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);font-weight:700;margin-bottom:12px}
+.skills{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.skills li{font-size:13px;padding:3px 10px;border-radius:999px}
 .credit{font-size:13px;color:var(--mute)}
 .credit a{text-decoration:underline}
+.box{border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;background:var(--white);box-shadow:0 1px 2px rgba(20,20,60,.04)}
+.pay{font-size:22px;font-weight:700;letter-spacing:-0.02em}
+.pay small{font-size:14px;font-weight:400;color:var(--mute)}
+.payNone{color:var(--mute);font-weight:500}
+.trust{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink-2)}
+.trust svg{width:16px;height:16px;color:var(--action)}
 .safe{display:flex;gap:8px;font-size:13px;color:var(--ink-2);background:var(--soft);border-radius:10px;padding:12px}
 .safe svg{flex:none;width:16px;height:16px;margin-top:2px;color:var(--tag-green)}
 .closed{padding-block:96px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
 @media (max-width:900px){
-  .layout{grid-template-columns:minmax(0,1fr);gap:24px}
+  .layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "side" "body"}
   .side{position:static}
 }
-.sub{font-size:16px;letter-spacing:-0.01em;color:var(--ink);margin-top:6px;margin-bottom:-6px}

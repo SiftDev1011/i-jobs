@@ -1,13 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { cookies } from 'next/headers';
-import { JobCard } from '@/components/job-card';
+import type { JobSummary } from '@/components/job-card';
 import { OnboardSheet } from '@/components/onboard-sheet';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import { engine, must } from '@/lib/engine';
 import { ACCESS_COOKIE, REFRESH_COOKIE } from '@/lib/session';
+import { PAGE_SIZE, type JobsQuery } from './query';
 import { FilterPanel } from './filter-panel';
+import { JobFeed } from './job-feed';
 import { activeCount, CATEGORIES, jobsHref, PAY, readFilters, TYPES, type Filters } from './filters';
 import s from './jobs.module.css';
 
@@ -23,16 +25,16 @@ export default async function Jobs({ searchParams }: { searchParams: Promise<Sea
   const q = f.q;
   const pay = PAY.find(([k]) => k === f.pay);
   const cursor = typeof sp.cursor === 'string' ? sp.cursor : undefined;
-  let page: { items?: Parameters<typeof JobCard>[0]['job'][]; next_cursor?: string | null } = {};
+  let page: { items?: JobSummary[]; next_cursor?: string | null } = {};
   let failed = false;
+  // The search as plain values: the first page is loaded here, later pages by the feed.
+  const query: JobsQuery = {
+    q, employment_type: f.types.length ? f.types : undefined, category: f.category, verified_only: f.verified || undefined,
+    location: f.worldwide ? ['worldwide'] : undefined, ...(pay ? { min_pay_monthly: pay[3], currency: pay[2] } : {}),
+  };
   try {
     const api = await engine();
-    page = must(await api.GET('/jobs', {
-      params: { query: {
-        q, employment_type: f.types.length ? f.types : undefined, category: f.category, verified_only: f.verified || undefined,
-        location: f.worldwide ? ['worldwide'] : undefined, ...(pay ? { min_pay_monthly: pay[3], currency: pay[2] } : {}), cursor, limit: 24,
-      } },
-    }));
+    page = must(await api.GET('/jobs', { params: { query: { ...query, cursor, limit: PAGE_SIZE } as never } }));
   } catch {
     failed = true;
   }
@@ -83,10 +85,7 @@ export default async function Jobs({ searchParams }: { searchParams: Promise<Sea
         ) : items.length === 0 ? (
           <p className={s.empty}>No jobs match that yet. Try fewer words or another filter.</p>
         ) : (
-          <div className={s.grid}>{items.map((j) => <JobCard key={j.id} job={j} />)}</div>
-        )}
-        {page.next_cursor && (
-          <p className={s.more}><Link className="btn btn-line" href={jobsHref(f, page.next_cursor)}>More jobs</Link></p>
+          <JobFeed key={JSON.stringify(query) + (cursor ?? '')} initial={items} next={page.next_cursor ?? null} query={query} moreHref={page.next_cursor ? jobsHref(f, page.next_cursor) : null} />
         )}
         {!signedIn && (
           <aside className={s.cta}>

@@ -24,6 +24,8 @@ const SearchQuery = z.object({
   limit,
 });
 
+const SimilarQuery = z.object({ limit: z.coerce.number().int().min(1).max(24).default(8) });
+
 const FindsQuery = z.object({ ref: z.string().max(64).optional(), cursor: z.string().max(500).optional(), limit });
 
 const ReportInput = z.object({
@@ -45,6 +47,12 @@ export class JobsController {
   @Get('jobs/:jobId')
   get(@Param('jobId', new ZodPipe(Uuid)) id: string) {
     return this.jobs.get(id);
+  }
+
+  @Public()
+  @Get('jobs/:jobId/similar')
+  similar(@Param('jobId', new ZodPipe(Uuid)) id: string, @Query(new ZodPipe(SimilarQuery)) q: z.infer<typeof SimilarQuery>) {
+    return this.jobs.similar(id, q.limit);
   }
 
   @Auth('required')

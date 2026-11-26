@@ -8,9 +8,11 @@ import { OnboardSheet } from '@/components/onboard-sheet';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import { engine, EngineError, maybe } from '@/lib/engine';
-import { companyTile, jobBadge, payLabel, timeAgo, typeLabel, whereLabel } from '@/lib/format';
+import { payLabel } from '@/lib/format';
 import { ACCESS_COOKIE, REFRESH_COOKIE } from '@/lib/session';
 import { Description } from '@/components/job-description';
+import { JobHeader } from '@/components/job-header';
+import { SimilarJobs } from '@/components/similar-jobs';
 import s from './job.module.css';
 
 type Params = { params: Promise<{ id: string }> };
@@ -53,59 +55,55 @@ export default async function JobPage({ params }: Params) {
   }
   if (!job) notFound();
 
-  const tile = companyTile(job.company_name);
-  const badge = jobBadge(job);
   const pay = payLabel(job.pay);
-  const type = typeLabel(job.employment_type);
 
   return (
     <div className="page">
       <SiteNav signedIn={signedIn} solid />
-      <main className={`wrap ${s.layout}`}>
-        <article className={s.main}>
-          <p className={s.crumb}><Link href="/jobs">Jobs</Link> / {job.company_name}</p>
-          <div className={s.head}>
-            <span className={`tile ${tile.colour} ${s.tile}`}>{tile.initials}</span>
-            <div>
-              <h1 className={s.h}>{job.title}</h1>
-              <p className={s.co}>{job.company_name}{job.community?.name ? ` · shared by ${job.community.name}` : ''}</p>
-            </div>
-          </div>
-          <div className={s.tags}>
-            <span className="tag">{whereLabel(job)}</span>
-            {type && <span className="tag">{type}</span>}
-            {job.seniority && <span className="tag">{job.seniority}</span>}
-            {badge && <span className={`badge ${badge.cls}`}><Icon name={badge.icon} />{badge.label}</span>}
-            {job.match_score != null && <span className="tag t-green">{job.match_score}% match</span>}
-          </div>
-          {job.skills?.length ? <div className={s.tags}>{job.skills.map((k) => <span key={k} className="tag t-blue">{k}</span>)}</div> : null}
-          {job.description ? <Description text={job.description} /> : <p>{job.summary}</p>}
-        </article>
+      <main className={`wrap ${s.wrap}`}>
+        <p className={s.crumb}><Link href="/jobs">Jobs</Link> / {job.company_name}</p>
+        <div className={s.layout}>
+          <div className={s.headArea}><JobHeader job={job} /></div>
 
-        <aside className={s.side}>
-          <div className={s.box}>
-            {pay ? <p className={s.pay}>{pay.amount} <small>{pay.period}</small></p> : <p className={s.payNone}>Pay not stated</p>}
-            <dl className={s.facts}>
-              {job.first_seen_at && <div><dt>Found</dt><dd>{timeAgo(job.first_seen_at)}</dd></div>}
-              {job.deadline_at && <div><dt>Closes</dt><dd>{new Date(job.deadline_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos',  weekday: 'short', day: 'numeric', month: 'short' })}</dd></div>}
-              <div><dt>Employer</dt><dd>{job.trust === 'verified_employer' ? 'Verified' : job.trust === 'careers_page' ? 'From their careers page' : 'Not verified'}</dd></div>
-            </dl>
-            {signedIn ? (
-              <Link className="btn btn-green btn-block" href={`/app/jobs/${job.id}`}>Apply with i-jobs</Link>
-            ) : (
-              <>
-                <OnboardButton className="btn btn-green btn-block">Join to apply</OnboardButton>
-                <p className="hint">i-jobs members apply in one tap, or let autopilot do it.</p>
-              </>
-            )}
+          <article className={s.body}>
+            {job.skills?.length ? (
+              <section>
+                <h2 className={s.sec}>Skills</h2>
+                <ul className={s.skills}>{job.skills.map((k) => <li key={k} className="tag t-blue">{k}</li>)}</ul>
+              </section>
+            ) : null}
+            <section>
+              <h2 className={s.sec}>Job description</h2>
+              {job.description ? <Description text={job.description} /> : <p>{job.summary}</p>}
+            </section>
             {job.source?.credit && (
               <p className={s.credit}>
-                {job.source.url ? <a href={job.source.url} target="_blank" rel="noopener noreferrer nofollow">{job.source.credit}</a> : job.source.credit}
+                Found {job.source.url ? <a href={job.source.url} target="_blank" rel="noopener noreferrer nofollow">{job.source.credit}</a> : job.source.credit}
               </p>
             )}
-          </div>
-          <p className={s.safe}><Icon name="shield" />Never pay to apply for a job. If a recruiter asks for money, your BVN or bank details, report the job.</p>
-        </aside>
+          </article>
+
+          <aside className={s.side}>
+            <div className={s.box}>
+              {pay && <p className={s.pay}>{pay.amount} <small>{pay.period}</small></p>}
+              <p className={s.trust}>
+                <Icon name="shield" />
+                {job.trust === 'verified_employer' ? 'Verified employer' : job.trust === 'careers_page' ? 'From the company’s careers page' : 'Employer not verified'}
+              </p>
+              {signedIn ? (
+                <Link className="btn btn-green btn-block" href={`/app/jobs/${job.id}`}>Apply with i-jobs</Link>
+              ) : (
+                <>
+                  <OnboardButton className="btn btn-green btn-block">Join to apply</OnboardButton>
+                  <p className="hint">i-jobs members apply in one tap, or let autopilot do it.</p>
+                </>
+              )}
+            </div>
+            <p className={s.safe}><Icon name="shield" />Never pay to apply for a job. If a recruiter asks for money, your BVN or bank details, report the job.</p>
+          </aside>
+        </div>
+
+        <SimilarJobs id={job.id} />
       </main>
       <SiteFooter />
       <OnboardSheet />

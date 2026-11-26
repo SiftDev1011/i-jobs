@@ -3,7 +3,7 @@
  * through the board's own link. Those rules live on the source row; this file only reads data.
  */
 import { payFromNumbers, payFromText } from '../normalise';
-import { htmlToText, oneLine, safeUrl, toDate } from '../text';
+import { htmlToText, logoUrl, oneLine, safeUrl, toDate } from '../text';
 import { cfg, Connector } from '../types';
 
 // ------------------------------------------------------------------ Himalayas
@@ -26,6 +26,7 @@ export const himalayas: Connector = {
     return {
       title: oneLine(j.title, 200),
       company: oneLine(j.companyName, 120),
+      companyLogo: logoUrl(j.companyLogo),
       description: htmlToText(j.description) || oneLine(j.excerpt, 2000),
       sourceUrl: safeUrl(j.guid),
       // Their terms: Apply must use applicationLink.
@@ -59,6 +60,7 @@ export const jobicy: Connector = {
     return {
       title: oneLine(j.jobTitle, 200),
       company: oneLine(j.companyName, 120),
+      companyLogo: logoUrl(j.companyLogo),
       description: htmlToText(j.jobDescription) || oneLine(j.jobExcerpt, 2000),
       sourceUrl: safeUrl(j.url),
       applyUrl: safeUrl(j.url),
@@ -85,6 +87,7 @@ export const remoteok: Connector = {
     return {
       title: oneLine(j.position, 200),
       company: oneLine(j.company, 120),
+      companyLogo: logoUrl(j.company_logo) ?? logoUrl(j.logo),
       description: htmlToText(j.description),
       sourceUrl: safeUrl(j.url),
       applyUrl: safeUrl(j.url),
@@ -111,6 +114,7 @@ export const remotive: Connector = {
     return {
       title: oneLine(j.title, 200),
       company: oneLine(j.company_name, 120),
+      companyLogo: logoUrl(j.company_logo) ?? logoUrl(j.company_logo_url),
       description: htmlToText(j.description),
       sourceUrl: safeUrl(j.url),
       applyUrl: safeUrl(j.url),
@@ -198,6 +202,7 @@ export const getonboard: Connector = {
     return {
       title: oneLine(a.title, 200),
       company: oneLine(a.company?.data?.attributes?.name ?? 'Unknown company', 120),
+      companyLogo: logoUrl(a.company?.data?.attributes?.logo),
       description: [a.description, a.projects, a.functions, a.desirable, a.benefits].map(htmlToText).filter(Boolean).join('\n\n'),
       sourceUrl: safeUrl(j.links?.public_url),
       applyUrl: safeUrl(j.links?.public_url),

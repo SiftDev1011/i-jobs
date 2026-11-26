@@ -4,7 +4,7 @@
  */
 import { countryCode } from '../location';
 import { payFromNumbers, payFromText } from '../normalise';
-import { hostOf, htmlToText, oneLine, safeUrl, toDate } from '../text';
+import { hostOf, htmlToText, logoUrl, oneLine, safeUrl, toDate } from '../text';
 import { cfg, Connector, ConnectorUnavailable } from '../types';
 
 const enc = encodeURIComponent;
@@ -220,6 +220,7 @@ export const theirstack: Connector = {
       title: oneLine(j.job_title, 200),
       company: oneLine(company, 120),
       companyDomain: j.company_object?.domain ?? j.company_domain ?? null,
+      companyLogo: logoUrl(j.company_object?.logo),
       description: htmlToText(j.description) || String(j.description ?? ''),
       sourceUrl: safeUrl(j.final_url ?? j.url),
       applyUrl: safeUrl(j.final_url ?? j.url),

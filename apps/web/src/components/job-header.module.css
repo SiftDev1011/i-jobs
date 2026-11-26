@@ -1,0 +1,21 @@
+.header{display:flex;flex-direction:column;gap:16px}
+.top{display:flex;gap:16px;align-items:center;min-width:0}
+.who{min-width:0}
+.h{font-size:clamp(24px, 3.2vw, 34px);line-height:1.15}
+.co{color:var(--ink-2);margin-top:4px;font-weight:500}
+.shared{color:var(--mute);font-weight:400}
+.chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.chips li{display:inline-flex;align-items:center;gap:5px;font-size:13px;padding:3px 10px;border-radius:999px}
+.chips svg{width:13px;height:13px}
+.facts{margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:12px;background:var(--soft);overflow:hidden}
+.facts div{padding:12px 14px;min-width:0}
+.facts div + div{border-left:1px solid var(--line)}
+.facts dt{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.facts dd{margin:4px 0 0;font-weight:600;font-size:15px;overflow-wrap:anywhere}
+.facts small{font-weight:400;font-size:12.5px;color:var(--mute)}
+.none{font-weight:400;color:var(--mute);font-size:14px}
+@media (max-width:640px){
+  .facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .facts div:nth-child(3){border-left:none}
+  .facts div:nth-child(n+3){border-top:1px solid var(--line)}
+}

@@ -1,5 +1,5 @@
 /** The icon set from the landing page, as SVG symbols. Use with <Icon name="..." />. */
-export type IconName = 'headset' | 'chart' | 'brush' | 'pen' | 'code' | 'cart' | 'cap' | 'cal' | 'video' | 'users' | 'calc' | 'globe' | 'brief' | 'laptop' | 'star' | 'msg' | 'shield' | 'flame' | 'check' | 'x';
+export type IconName = 'headset' | 'chart' | 'brush' | 'pen' | 'code' | 'cart' | 'cap' | 'cal' | 'video' | 'users' | 'calc' | 'globe' | 'brief' | 'laptop' | 'star' | 'msg' | 'shield' | 'flame' | 'check' | 'x' | 'pin' | 'clock';
 
 export function Icons() {
   return (
@@ -24,6 +24,8 @@ export function Icons() {
         <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></symbol>
         <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 21c-3.9 0-7-2.7-7-6.5 0-3.4 2.6-5.6 4-8.5.7 2 2 3 3 3 0-2.5 1-4.5 3-6 0 3 4 5.5 4 11.5 0 3.8-3.1 6.5-7 6.5z" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/></symbol>
         <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></symbol>
+        <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/><circle cx="12" cy="10" r="2.4" fill="none" stroke="currentColor" strokeWidth="2.2"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="2.2"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></symbol>
         <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"/></symbol>
       </defs>
     </svg>

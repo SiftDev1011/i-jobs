@@ -534,6 +534,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{jobId}/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Jobs like this one
+         * @description For "Recommended jobs" under a job. Nearest by meaning when both jobs have an embedding;
+         *     otherwise the same category, ranked by shared title words, newest first. Never the job itself.
+         *
+         */
+        get: operations["similarJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{jobId}/reports": {
         parameters: {
             query?: never;
@@ -2263,6 +2285,11 @@ export interface components {
             id: string;
             title: string;
             company_name: string;
+            /**
+             * Format: uri
+             * @description The company's logo from the job source (https), when it gave one. Show a fallback (e.g. the company's initial) when null or when the image fails to load.
+             */
+            company_logo_url?: string | null;
             location_scope: components["schemas"]["LocationScope"];
             allowed_countries?: string[];
             allowed_regions?: string[];
@@ -3830,6 +3857,33 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    similarJobs: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["JobSummary"][];
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     reportJob: {

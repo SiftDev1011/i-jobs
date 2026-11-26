@@ -53,7 +53,7 @@ export function AppShell({ name, unread, roles, children }: { name: string; unre
   return (
     <div className={s.shell}>
       <aside className={s.side}>
-        <Link href="/app" className={s.logo} aria-label="i-jobs home"><img src="/logo-header.png" alt="i-jobs" width={372} height={120} /></Link>
+        <Link href="/app" className={s.logo} aria-label="i-jobs home"><img src="/logo-header.png" alt="i-jobs" width={282} height={96} /></Link>
         <nav className={s.nav} aria-label="App">{MAIN.map(item)}</nav>
         {WORK.length > 0 && <nav className={`${s.nav} ${s.work}`} aria-label="Work">{WORK.map(item)}</nav>}
         <nav className={`${s.nav} ${s.lower}`} aria-label="More">{MORE.map(item)}</nav>
@@ -65,7 +65,7 @@ export function AppShell({ name, unread, roles, children }: { name: string; unre
       </aside>
 
       <header className={s.top}>
-        <Link href="/app" aria-label="i-jobs home"><img src="/logo-header.png" alt="i-jobs" width={372} height={120} className={s.topLogo} /></Link>
+        <Link href="/app" aria-label="i-jobs home"><img src="/logo-header.png" alt="i-jobs" width={282} height={96} className={s.topLogo} /></Link>
         <Link href="/app/notifications" className={s.bell} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}>
           <NavIcon name="bell" size={22} />{unread > 0 && <b className={s.dot} />}
         </Link>

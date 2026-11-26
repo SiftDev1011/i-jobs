@@ -1,0 +1,4 @@
+.similar{border-top:1px solid var(--line);padding-top:36px;margin-top:8px}
+.h{font-size:22px;letter-spacing:-0.02em}
+.sub{color:var(--mute);margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(250px, 1fr));gap:16px;margin-top:20px}

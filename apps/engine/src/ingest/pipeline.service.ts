@@ -193,6 +193,7 @@ export class PipelineService {
     const description = truncate(n.description, 20_000);
     const fields = {
       company_name: oneLine(n.company, 120),
+      company_logo_url: n.companyLogo ?? null,
       title: oneLine(n.title, 200),
       description,
       summary: aiSummary ?? firstWords(description),

@@ -23,7 +23,7 @@ role if missing, applies every migration and seed, and sets known site keys for 
 School1 (`env.ts`). The app connects as `ijobs_app`, exactly as in production, so row-level security
 is really tested.
 
-## What's covered (212 tests)
+## What's covered (215 tests)
 
 - **Sign-in:** email and phone codes; wrong code; lock after five tries; codes work once; rate limits
   with `Retry-After`; field-by-field validation; refresh rotation; reuse of an old refresh token ends
@@ -39,12 +39,13 @@ is really tested.
 - **Housekeeping:** the hourly clean-up runs.
 - **Ingest helpers:** location tagging (countries, regions, time zones, US states, Georgia), employment
   type, seniority, pay from numbers and text, categories, duplicate keys, HTML to text, dates, scam rules.
-- **Connectors:** all 24 sources against sample responses in `fixtures/sources.ts`, plus HTTP retries.
+- **Connectors:** all 24 sources against sample responses in `fixtures/sources.ts`, plus HTTP retries;
+  company logos taken where a source gives one (https only).
 - **Pipeline:** board → raw → live job; merging copies and promoting the better source; closing jobs
   that vanish; blocking scams into moderation; excluded origins; on-site filter; AI extraction with a
   fake Groq; waiting when the budget is spent; expiry; dead links; scheduling and broken boards.
 - **Jobs API:** search filters and paging, badges and credit, closed and hidden jobs, job finds with
-  publish delays, reports hiding a job, admin sources (with audit), AI budget and scam takedowns.
+  publish delays, company logos, recommended (similar) jobs, reports hiding a job, admin sources (with audit), AI budget and scam takedowns.
 - **Profiles and matching:** real PDF, Word and scanned CVs (`fixtures/cv/`); upload links, consent,
   AI reading with a fake Groq, budget waits, unreadable CVs; profile edits, time zones, strength and
   confirmation; eligibility (country, region, on-site, hours, source rules); reasons and gaps linked

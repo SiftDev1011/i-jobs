@@ -45,7 +45,7 @@ export function SiteNav({ signedIn, solid = false }: { signedIn: boolean; solid?
       <div className={s.bar} />
       <div className={s['nav-in']}>
         <Link className={s.brand} href="/" aria-label="i-jobs home">
-          <img src="/logo-header.png" alt="i-jobs" width={372} height={120} />
+          <img src="/logo-header.png" alt="i-jobs" width={282} height={96} />
         </Link>
         <nav className={s['nav-links']} aria-label="Main">
           {LINKS.map((l) => <Link key={l.href} href={l.href}>{l.label}</Link>)}

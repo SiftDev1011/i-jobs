@@ -35,7 +35,7 @@ The browser never calls the engine and never sees a token or site key.
 | Path | What it does |
 |---|---|
 | `/` | The landing page. The job wall shows real job finds (`GET /job-finds`). In development it falls back to sample cards; production never does. |
-| `/jobs`, `/jobs/[id]` | Job search with filters, and the job page with a source credit and a safety note |
+| `/jobs`, `/jobs/[id]` | Job search with filters: 100 jobs at a time, "More jobs" then endless scroll. The job page: logo, key facts (pay, type, posted, closes), skills, the description in sections, apply box with a safety note, and recommended jobs |
 | `/communities` | Find a verified community. Each result opens its join page. |
 | `/help` | Search the help articles |
 | `/sign-in` | Email or phone, then a 6-digit code. Records agreement to the terms and privacy notice. |

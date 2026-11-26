@@ -51,6 +51,8 @@ export interface NormalisedJob {
   title: string;
   company: string;
   companyDomain?: string | null;
+  /** The company's logo, when the source gives one (https). */
+  companyLogo?: string | null;
   /** Plain text. */
   description: string;
   /** The posting's page on the source (for credit and link-back). */

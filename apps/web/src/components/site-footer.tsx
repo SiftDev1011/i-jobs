@@ -8,12 +8,27 @@ const COLUMNS: { title: string; links: [string, string][] }[] = [
   { title: 'i-jobs', links: [['About', '/about'], ['Help centre', '/help'], ['Report a job', '/help?q=report'], ['Privacy and your data', '/privacy']] },
 ];
 
-export function SiteFooter() {
+/** A few links for pages where people are doing something (jobs, sign-in, forms, help). */
+const SLIM: [string, string][] = [['Jobs', '/jobs'], ['Communities', '/communities'], ['Help', '/help'], ['Privacy', '/privacy'], ['Terms', '/terms']];
+
+/** The home page gets the full site map; every other page gets the slim footer. */
+export function SiteFooter({ full = false }: { full?: boolean }) {
+  if (!full) {
+    return (
+      <footer className={s.footer}>
+        <div className={`wrap ${s.slim}`}>
+          <Link href="/" className={s.slogo} aria-label="i-jobs home"><img src="/logo-footer.png" alt="i-jobs by 99" width={530} height={200} /></Link>
+          <nav aria-label="Footer" className={s.slinks}>{SLIM.map(([label, href]) => <Link key={href} href={href}>{label}</Link>)}</nav>
+          <span className={s.copy}>© {new Date().getFullYear()} i-jobs by 99</span>
+        </div>
+      </footer>
+    );
+  }
   return (
     <footer className={s.footer}>
       <div className={`wrap ${s.foot}`}>
         <div className={s.flogo}>
-          <img src="/logo-footer.png" alt="i-jobs by 99" width={527} height={200} />
+          <img src="/logo-footer.png" alt="i-jobs by 99" width={530} height={200} />
           <p className={s.blurb}>Remote jobs you can actually get, applied for while you get on with your day.</p>
         </div>
         {COLUMNS.map((c) => (

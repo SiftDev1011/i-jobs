@@ -104,7 +104,7 @@ export const FIXTURES: [string, string | object][] = [
   ['himalayas.app/jobs/api', {
     offset: 0, limit: 20, totalCount: 1,
     jobs: [{
-      title: 'Frontend Engineer', excerpt: 'React role', companyName: 'Nimbus', employmentType: 'Full Time',
+      title: 'Frontend Engineer', excerpt: 'React role', companyName: 'Nimbus', companyLogo: 'https://cdn.himalayas.app/nimbus.png', employmentType: 'Full Time',
       minSalary: 50000, maxSalary: 80000, currency: 'USD', seniority: ['Mid-level'],
       locationRestrictions: ['Nigeria', 'Kenya'], timezoneRestrictions: [0, 1, 3],
       categories: ['Software Engineering'], description: '<p>Build UI in React.</p>',
@@ -116,7 +116,7 @@ export const FIXTURES: [string, string | object][] = [
   ['jobicy.com/api/v2/remote-jobs', {
     apiVersion: '2', jobCount: 1,
     jobs: [{
-      id: 99001, url: 'https://jobicy.com/jobs/99001-seo-specialist', jobTitle: 'SEO Specialist', companyName: 'Rankly',
+      id: 99001, url: 'https://jobicy.com/jobs/99001-seo-specialist', jobTitle: 'SEO Specialist', companyName: 'Rankly', companyLogo: 'http://insecure.example/rankly.png',
       jobIndustry: ['Marketing'], jobType: ['full-time'], jobGeo: 'Anywhere', jobLevel: 'Any',
       jobExcerpt: 'Grow organic traffic', jobDescription: '<p>Grow organic traffic.</p>', pubDate: '2026-11-12 08:30:00',
       annualSalaryMin: '30000', annualSalaryMax: '45000', salaryCurrency: 'USD',
@@ -126,7 +126,7 @@ export const FIXTURES: [string, string | object][] = [
     { last_updated: 1794441600, legal: 'API Terms of Service: credit Remote OK and link back.' },
     {
       slug: 'remote-devops-engineer-cloudy-1100', id: '1100', epoch: 1794384000, date: '2026-11-11T08:00:00+00:00',
-      company: 'Cloudy', position: 'DevOps Engineer', tags: ['devops', 'aws', 'kubernetes'],
+      company: 'Cloudy', company_logo: '', logo: 'https://remoteok.com/assets/cloudy.png', position: 'DevOps Engineer', tags: ['devops', 'aws', 'kubernetes'],
       description: '<p>Run our clusters.</p>', location: 'Worldwide', salary_min: 70000, salary_max: 100000,
       url: 'https://remoteOK.com/remote-jobs/remote-devops-engineer-cloudy-1100', apply_url: 'https://remoteOK.com/l/1100',
     },
@@ -135,7 +135,7 @@ export const FIXTURES: [string, string | object][] = [
     '0-legal-notice': 'Remotive API Legal Notice', 'job-count': 1,
     jobs: [{
       id: 2001, url: 'https://remotive.com/remote-jobs/customer-support/support-hero-2001', title: 'Support Hero',
-      company_name: 'Helpful', category: 'Customer Service', tags: ['zendesk'], job_type: 'full_time',
+      company_name: 'Helpful', company_logo: 'https://remotive.com/job/123/logo', category: 'Customer Service', tags: ['zendesk'], job_type: 'full_time',
       publication_date: '2026-11-12T08:50:16', candidate_required_location: 'Africa, Europe',
       salary: '$1,500 - $2,000 per month', description: '<p>Answer tickets by email and chat for our customers worldwide.</p>',
     }],
@@ -160,7 +160,7 @@ export const FIXTURES: [string, string | object][] = [
   }]],
   ['getonbrd.com/api/v0/categories/programming/jobs', {
     data: [
-      { id: 'ruby-dev-acme', type: 'job', attributes: { title: 'Ruby Developer', description: '<p>Rails app.</p>', remote: true, remote_modality: 'fully_remote', remote_zone: 'Worldwide', countries: [], min_salary: 3000, max_salary: 4000, published_at: 1794218400, category_name: 'Programming', company: { data: { attributes: { name: 'Acme LatAm' } } } }, links: { public_url: 'https://www.getonbrd.com/jobs/programming/ruby-dev-acme' } },
+      { id: 'ruby-dev-acme', type: 'job', attributes: { title: 'Ruby Developer', description: '<p>Rails app.</p>', remote: true, remote_modality: 'fully_remote', remote_zone: 'Worldwide', countries: [], min_salary: 3000, max_salary: 4000, published_at: 1794218400, category_name: 'Programming', company: { data: { attributes: { name: 'Acme LatAm', logo: 'https://getonbrd.com/logos/acme.png' } } } }, links: { public_url: 'https://www.getonbrd.com/jobs/programming/ruby-dev-acme' } },
       { id: 'local-only', type: 'job', attributes: { title: 'Local Dev', remote: true, remote_modality: 'remote_local', countries: ['Chile'] }, links: { public_url: 'https://www.getonbrd.com/jobs/x' } },
     ],
   }],
@@ -196,7 +196,7 @@ export const FIXTURES: [string, string | object][] = [
   }],
   ['api.theirstack.com/v1/jobs/search', {
     metadata: {}, data: [
-      { id: 900001, job_title: 'QA Engineer', url: 'https://boards.example.com/qa', final_url: 'https://careers.qa.example/qa', source_url: 'https://boards.example.com', date_posted: '2026-11-11', company: 'QAco', company_object: { name: 'QAco', domain: 'qa.example' }, location: 'Remote', country_code: 'US', remote: true, hybrid: false, min_annual_salary_usd: 60000, max_annual_salary_usd: 80000, employment_statuses: ['full_time'], description: 'Test all the things: write end-to-end tests and keep releases safe.', technology_slugs: ['cypress'] },
+      { id: 900001, job_title: 'QA Engineer', url: 'https://boards.example.com/qa', final_url: 'https://careers.qa.example/qa', source_url: 'https://boards.example.com', date_posted: '2026-11-11', company: 'QAco', company_object: { name: 'QAco', domain: 'qa.example', logo: 'https://logos.theirstack.com/qaco.png' }, location: 'Remote', country_code: 'US', remote: true, hybrid: false, min_annual_salary_usd: 60000, max_annual_salary_usd: 80000, employment_statuses: ['full_time'], description: 'Test all the things: write end-to-end tests and keep releases safe.', technology_slugs: ['cypress'] },
       { id: 900002, job_title: 'From LinkedIn', url: 'https://www.linkedin.com/jobs/view/1', final_url: null, source_url: 'https://www.linkedin.com', date_posted: '2026-11-11', company: 'Linky', remote: true, description: 'x' },
     ],
   }],

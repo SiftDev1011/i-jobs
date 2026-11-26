@@ -65,6 +65,15 @@ describe('Jobs API', () => {
     expect(bad.body.errors[0].field).toBe('location.0');
   });
 
+  it('shows the company logo when the source gave one', async () => {
+    await ctx.admin.query(`UPDATE jobs SET company_logo_url = 'https://cdn.example/acme.png' WHERE id = $1`, [ids.backend]);
+    const res = await ctx.http().get(`/v1/jobs?q=${TAG}&limit=50`).expect(200);
+    const byTitle = Object.fromEntries(res.body.items.map((j: any) => [j.title.split(' ')[0], j.company_logo_url]));
+    expect(byTitle).toMatchObject({ Backend: 'https://cdn.example/acme.png', Support: null });
+    expect((await ctx.http().get(`/v1/jobs/${ids.backend}`).expect(200)).body.company_logo_url).toBe('https://cdn.example/acme.png');
+    await expect(ctx.admin.query(`UPDATE jobs SET company_logo_url = 'http://insecure.example/x.png' WHERE id = $1`, [ids.backend])).rejects.toThrow(/jobs_company_logo_https/);
+  });
+
   it('pages with a cursor', async () => {
     const p1 = await ctx.http().get(`/v1/jobs?q=${TAG}&limit=2`).expect(200);
     expect(p1.body.items).toHaveLength(2);
@@ -176,5 +185,19 @@ describe('Jobs API', () => {
       expect((await ctx.admin.query(`SELECT count(*)::int AS n FROM scam_signatures WHERE example_job_id = $1`, [ids.intern])).rows[0].n).toBe(1);
       await ctx.http().get(`/v1/jobs/${ids.intern}`).expect(410);
     });
+  });
+  it('recommends similar jobs: same field, shared title words first, never itself or hidden jobs', async () => {
+    const devops = await addJob({ source: 'greenhouse', title: 'Backend Developer', trust: 'careers_page' });
+    await addJob({ source: 'greenhouse', title: 'Backend Hidden', status: 'pending_review' });
+    await addJob({ source: 'jobicy', title: 'Backend Copywriter', category: 'writing' });
+    const res = await ctx.http().get(`/v1/jobs/${ids.backend}/similar?limit=24`).expect(200);
+    const ids_ = res.body.items.map((j: any) => j.id);
+    expect(ids_).not.toContain(ids.backend);
+    expect(ids_[0]).toBe(devops); // same category, and shares "backend" plus this run's tag
+    const ours = res.body.items.filter((j: any) => j.title.endsWith(TAG)).map((j: any) => j.title.split(' ').slice(0, 2).join(' '));
+    expect(ours).toEqual(['Backend Developer']); // not the hidden one, not the other category
+    expect(res.body.items[0]).toMatchObject({ company_name: 'Acme', apply: expect.any(Object) });
+    await ctx.http().get(`/v1/jobs/${ids.pending}/similar`).expect(404);
+    await ctx.http().get(`/v1/jobs/${ids.backend}/similar?limit=99`).expect(400);
   });
 });

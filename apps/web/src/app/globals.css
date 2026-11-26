@@ -1,14 +1,16 @@
-/* i-jobs design tokens: calm and Notion-like. White canvas, black type, whisper borders,
-   one blue for actions, muted tag colours; the logo's five colours only in small touches. */
+/* i-jobs design tokens. White canvas, near-black type, whisper borders. The logo's six colours:
+   indigo (the "o") does the work: buttons, links, focus. White text on it is 7:1. Blue, teal and
+   orange are too light to carry small white text, so they are accents and soft tag tints with dark
+   ink; red is for warnings. Every pair here meets WCAG AA (4.5:1) for body text. */
 :root{
-  --white:#FFFFFF; --ink:#191918; --ink-2:#4B4A47; --mute:#7D7C78; --line:rgba(0,0,0,.09); --line-2:rgba(0,0,0,.14); --soft:#F7F6F3; --chip:#F1F0ED;
-  --action:#0A6CD6; --action-hover:#095EBB; --action-tint:#EAF3FE; --action-ink:#0A4F9C;
-  --tag-green-bg:#DCEEDC; --tag-green:#1F4A2C; --tag-yellow-bg:#FBEDC9; --tag-yellow:#4D3A10;
-  --tag-blue-bg:#D8E8F3; --tag-blue:#183A55; --tag-red-bg:#FBE0DC; --tag-red:#6B201B;
-  --tag-purple-bg:#E9E1F1; --tag-purple:#44295E; --tag-gray-bg:#E8E7E4; --tag-gray:#37352F;
-  --logo-green:#4FB518; --logo-yellow:#E5B000; --logo-blue:#0788FE; --logo-red:#F0182A; --logo-purple:#6F19ED;
-  --pastel:#EEF6EA;
-  --band:#191918; --band-ink:#FFFFFF; --band-mute:#B7B5AF; --band-card:#262624;
+  --white:#FFFFFF; --ink:#16161D; --ink-2:#45444F; --mute:#6E6D78; --line:rgba(20,20,60,.09); --line-2:rgba(20,20,60,.15); --soft:#F6F6FB; --chip:#EFEFF6;
+  --logo-purple:#6705B5; --logo-orange:#FE7302; --logo-teal:#02BDAA; --logo-indigo:#4546C6; --logo-blue:#0087FE; --logo-red:#F20D19;
+  --action:var(--logo-indigo); --action-hover:#3839A8; --action-tint:#ECECFB; --action-tint-hover:#DFDFF7; --action-ink:#2F3093;
+  --tag-green-bg:#D5F5F0; --tag-green:#035C52; --tag-yellow-bg:#FFE9D6; --tag-yellow:#8A3A00;
+  --tag-blue-bg:#DDEEFF; --tag-blue:#0B4A8C; --tag-red-bg:#FDE1E2; --tag-red:#9B0A12;
+  --tag-purple-bg:#EFE0FB; --tag-purple:#4E0790; --tag-gray-bg:#E9E9F0; --tag-gray:#34333D;
+  --pastel:#F1F1FC;
+  --band:#16161D; --band-ink:#FFFFFF; --band-mute:#B5B4C2; --band-card:#24242E;
   --page-bg:var(--white);
   --font-body:"Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --ease:cubic-bezier(.2,.8,.2,1);
@@ -37,7 +39,7 @@ img{max-width:100%}
 .btn-green{background:var(--action);color:var(--white)}
 .btn-green:hover:not(:disabled){background:var(--action-hover)}
 .btn-line{background:var(--action-tint);color:var(--action-ink)}
-.btn-line:hover{background:#DCEBFD}
+.btn-line:hover{background:var(--action-tint-hover)}
 .btn-yellow{background:var(--white);color:var(--ink)}
 .btn-yellow:hover{background:#ECEBE8}
 .btn-plain{background:transparent;color:var(--ink)}
@@ -103,4 +105,4 @@ input[type="checkbox"]:active,input[type="radio"]:active{transform:scale(.88)}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top, 0px);z-index:31;background:var(--white)}
 /* Pages other than the landing page start below the fixed nav. */
 .page{padding-top:calc(64px + env(safe-area-inset-top, 0px));min-height:100svh;display:flex;flex-direction:column}
-.page > main{flex:1}
+.page > main{flex:1;width:100%}

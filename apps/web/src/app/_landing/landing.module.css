@@ -35,11 +35,12 @@
 .type .caret{display:inline-block;width:.06em;height:.85em;background:var(--ink);margin-left:.04em;vertical-align:-.06em;animation:blink 1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
 .rainbow{display:inline-block;white-space:nowrap}
-.rainbow span:nth-child(5n+1){color:var(--logo-green)}
-.rainbow span:nth-child(5n+2){color:var(--logo-yellow)}
-.rainbow span:nth-child(5n+3){color:var(--logo-blue)}
-.rainbow span:nth-child(5n+4){color:var(--logo-red)}
-.rainbow span:nth-child(5n+5){color:var(--logo-purple)}
+.rainbow span:nth-child(6n+1){color:var(--logo-purple)}
+.rainbow span:nth-child(6n+2){color:var(--logo-orange)}
+.rainbow span:nth-child(6n+3){color:var(--logo-teal)}
+.rainbow span:nth-child(6n+4){color:var(--logo-indigo)}
+.rainbow span:nth-child(6n+5){color:var(--logo-blue)}
+.rainbow span:nth-child(6n+6){color:var(--logo-red)}
 .wall .sub{text-align:center;color:var(--ink-2);font-size:17px;margin:20px auto 0;max-width:52ch}
 .marquee{margin-top:48px;height:620px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;overflow:hidden;-webkit-mask-image:linear-gradient(transparent, #000 12%, #000 88%, transparent);mask-image:linear-gradient(transparent, #000 12%, #000 88%, transparent)}
 .col{min-width:0}

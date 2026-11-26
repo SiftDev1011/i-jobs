@@ -116,6 +116,16 @@ describe('connectors', () => {
     expect(loc((await run('workingnomads')).ok[0]).regions).toEqual(['europe']);
   });
 
+  it('company logos: taken where the source gives one, https only', async () => {
+    expect((await run('himalayas', { conf: { pages: 1 } })).ok[0].companyLogo).toBe('https://cdn.himalayas.app/nimbus.png');
+    expect((await run('jobicy')).ok[0].companyLogo).toBeNull(); // http, so not shown
+    expect((await run('remoteok')).ok[0].companyLogo).toBe('https://remoteok.com/assets/cloudy.png'); // empty company_logo falls back to logo
+    expect((await run('remotive', { conf: { limit: 300 } })).ok[0].companyLogo).toBe('https://remotive.com/job/123/logo');
+    expect((await run('getonboard', { conf: { categories: ['programming'] } })).ok[0].companyLogo).toBe('https://getonbrd.com/logos/acme.png');
+    expect((await run('theirstack')).ok[0].companyLogo).toBe('https://logos.theirstack.com/qaco.png');
+    expect((await run('weworkremotely')).ok[0].companyLogo).toBeUndefined();
+  });
+
   it('getonboard: keeps fully remote jobs open to all only', async () => {
     const { jobs, ok } = await run('getonboard', { conf: { categories: ['programming'] } });
     expect(ok.map((j) => j.title)).toEqual(['Ruby Developer']);

@@ -38,7 +38,7 @@ export class JobsService {
       .innerJoin('job_sources as js', (join) => join.onRef('js.job_id', '=', 'j.id').on('js.is_primary', '=', true))
       .innerJoin('sources as s', 's.key', 'js.source_key')
       .select([
-        'j.id', 'j.title', 'j.company_name', 'j.location_scope', 'j.allowed_countries', 'j.allowed_regions', 'j.employment_type',
+        'j.id', 'j.title', 'j.company_name', 'j.company_logo_url', 'j.location_scope', 'j.allowed_countries', 'j.allowed_regions', 'j.employment_type',
         'j.salary_min_minor', 'j.salary_max_minor', 'j.salary_currency', 'j.salary_period', 'j.trust', 'j.first_seen_at',
         'j.original_posted_at', 'j.deadline_at', 'j.expires_at', 'j.seniority', 'j.apply_method', 'j.apply_url', 'j.apply_email',
         'j.autopilot_sent', 'j.autopilot_cap', 's.key as source_key', 's.credit_text', 's.requires_credit', 's.allow_autopilot',
@@ -91,6 +91,30 @@ export class JobsService {
       community: row.community_name ? { name: row.community_name } : null,
       ...(opts.anyStatus ? { status: row.status } : {}),
     };
+  }
+
+  /**
+   * Jobs like this one, for "Recommended jobs" under a job. Nearest by meaning when both jobs have an
+   * embedding (Voyage); otherwise the same category, ranked by shared title words, newest first.
+   */
+  async similar(id: string, limit: number) {
+    const job = await this.db.k
+      .selectFrom('jobs')
+      .select(['id', 'title', 'category', 'status', sql<boolean>`embedding IS NOT NULL`.as('embedded')])
+      .where('id', '=', id)
+      .executeTakeFirst();
+    if (!job || job.status === 'pending_review') throw Problem.notFound('job_not_found', 'There is no job here');
+    let q = this.base().where('j.status', '=', 'live').where('s.display', '=', 'full').where('j.id', '!=', id);
+    if (job.embedded) {
+      q = q.where('j.embedding', 'is not', null).orderBy(sql`j.embedding <=> (SELECT embedding FROM jobs WHERE id = ${id})`);
+    } else {
+      // Title words of 3+ letters, any of them: "Senior Frontend Engineer" → senior or frontend or engineer.
+      const words = [...new Set(job.title.toLowerCase().match(/[a-z][a-z0-9+#.-]{2,}/g) ?? [])].slice(0, 8);
+      if (job.category) q = q.where('j.category', '=', job.category);
+      if (words.length) q = q.orderBy(sql`ts_rank(j.search, websearch_to_tsquery('english', ${words.join(' or ')}))`, 'desc');
+    }
+    const rows = await q.orderBy('j.first_seen_at', 'desc').limit(limit).execute();
+    return { items: rows.map((r) => this.summary(r)) };
   }
 
   /** The shareable job finds page: newest jobs, including sources that only allow free display. */
@@ -168,6 +192,7 @@ export class JobsService {
       id: r.id,
       title: r.title,
       company_name: r.company_name,
+      company_logo_url: r.company_logo_url ?? null,
       location_scope: r.location_scope,
       allowed_countries: r.allowed_countries,
       allowed_regions: r.allowed_regions,

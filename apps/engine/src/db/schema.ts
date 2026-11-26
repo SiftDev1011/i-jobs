@@ -598,6 +598,7 @@ export interface Jobs {
   category: string | null;
   closed_reason: string | null;
   community_id: string | null;
+  company_logo_url: string | null;
   company_name: string;
   created_at: Generated<Timestamp>;
   deadline_at: Timestamp | null;

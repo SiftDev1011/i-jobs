@@ -149,7 +149,7 @@ export default async function Landing() {
           </div>
         </section>
       </main>
-      <SiteFooter />
+      <SiteFooter full />
       <OnboardSheet />
       <PastelBg />
     </>

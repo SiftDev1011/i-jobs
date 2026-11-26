@@ -86,6 +86,12 @@ export function hostOf(url: string | null | undefined): string | null {
 }
 
 /** Only http(s) links are ever stored or shown. */
+/** A company logo address we can show: https only, sensible length. */
+export function logoUrl(url: unknown): string | null {
+  const u = typeof url === 'string' ? safeUrl(url) : null;
+  return u && u.startsWith('https://') && u.length <= 1000 ? u : null;
+}
+
 export function safeUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   try {
