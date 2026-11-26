@@ -5,7 +5,7 @@
 | Rule | Setting | Default |
 |---|---|---|
 | Lowest price an owner can set | `MINIMUM_PRICE_KOBO` | ₦5,000 |
-| i-jobs' share of each payment | `PLATFORM_SHARE_BPS` | 20% (stored per community when it's created) |
+| i-jobs' share of each payment | `PLATFORM_SHARE_BPS` | 30% (stored per community when it's created) |
 | Membership periods | `billing_period` per community | monthly 30 days, quarterly 90, yearly 365 |
 | Free trial | owner's choice, `TRIAL_DAYS`; only when texts are on (`SMS_DRIVER` not `none`) | 7 days, once per person (phone, card) |
 | Access after a missed renewal | `GRACE_DAYS` | 3 days (none if the community was banned) |
@@ -23,7 +23,7 @@ is checked (SHA-512 of notificationId + statusCode + externalReferenceNumber + s
 outstandingBalance + hash key), and only a pending payment can succeed, once. Then:
 
 - **Membership:** active; the period starts when the current one (or the trial) ends, so paying
-  early never loses days. Ledger: cash +100%, i-jobs −20%, owner −80%.
+  early never loses days. Ledger: cash +100%, i-jobs −30%, owner −70%.
 - **Code batch:** the codes are created (`LTH-7K4P9QXA`), downloadable as CSV for Selar. Ledger:
   cash +100%, i-jobs −100%.
 

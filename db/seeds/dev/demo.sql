@@ -4,9 +4,12 @@ BEGIN;
 INSERT INTO users (id, email, email_verified_at, full_name, date_of_birth, age_band) VALUES ('11111111-1111-4111-8111-111111111111', 'owner@demo.ijobs.example', now(), 'Tunde Bello', '1990-03-14', 'adult') ON CONFLICT DO NOTHING;
 INSERT INTO owner_profiles (user_id, legal_name, id_type, id_number_hash, payout_eligible) VALUES ('11111111-1111-4111-8111-111111111111', 'Tunde Bello', 'nin', 'demo-hash-1', true) ON CONFLICT DO NOTHING;
 INSERT INTO communities (id, owner_user_id, name, slug, invite_code, description, status, price_kobo, platform_share_bps, trial_enabled) VALUES
-  ('22222222-2222-4222-8222-222222222221', '11111111-1111-4111-8111-111111111111', 'Lagos Tech Hustlers', 'lagos-tech', 'LTH-2048', 'Remote tech and support jobs for people in Lagos and beyond. Shared daily, checked by the admins.', 'active', 500000, 2000, true),
-  ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'Grad Jobs Africa', 'grad-jobs-africa', 'GJA-1100', 'Internships and graduate roles open to people across Africa.', 'active', 500000, 2000, false)
+  ('22222222-2222-4222-8222-222222222221', '11111111-1111-4111-8111-111111111111', 'Lagos Tech Hustlers', 'lagos-tech', 'LTH-2048', 'Remote tech and support jobs for people in Lagos and beyond. Shared daily, checked by the admins.', 'active', 500000, 3000, true),
+  ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'Grad Jobs Africa', 'grad-jobs-africa', 'GJA-1100', 'Internships and graduate roles open to people across Africa.', 'active', 500000, 3000, false)
   ON CONFLICT DO NOTHING;
+-- Keep older demo databases in line with the current share (30%).
+UPDATE communities SET platform_share_bps = 3000
+ WHERE id IN ('22222222-2222-4222-8222-222222222221', '22222222-2222-4222-8222-222222222222');
 INSERT INTO raw_postings (id, source_key, external_id, payload, content_hash, status) VALUES ('44444444-4444-4444-8444-000000000001', 'greenhouse', 'demo-1', '{}', 'demo-1', 'extracted') ON CONFLICT DO NOTHING;
 INSERT INTO jobs (id, title, company_name, description, summary, location_scope, allowed_countries, is_remote, employment_type, salary_min_minor, salary_max_minor, salary_currency, salary_period, skills, category, apply_method, apply_email, primary_source_key, trust, status, first_seen_at, expires_at, community_id, owner_confirmed_at) VALUES ('33333333-3333-4333-8333-000000000001', 'Customer success associate', 'Kora Labs', $d$Kora Labs is hiring a customer success associate to join a remote team.
 

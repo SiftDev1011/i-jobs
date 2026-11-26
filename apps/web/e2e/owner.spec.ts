@@ -98,7 +98,7 @@ test.describe.serial('a community owner', () => {
   test('sees earnings', async () => {
     await page.goto(`${base}/earnings`);
     await expect(page.getByText('Ready for your next payout')).toBeVisible();
-    await expect(page.getByText(/You keep 80%/)).toBeVisible();
+    await expect(page.getByText(/You keep 70%/)).toBeVisible();
   });
 
   test('changes settings without losing the description', async () => {

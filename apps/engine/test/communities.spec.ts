@@ -47,15 +47,15 @@ describe('Communities and money', () => {
 
   it('owner pricing rules show the floor and our share (owner page only)', async () => {
     expect((await ctx.http().get('/v1/owner/pricing-rules').set(owner.auth).expect(200)).body).toEqual({
-      minimum_price: { amount_minor: 500000, currency: 'NGN' }, platform_share_percent: 20,
-      code_unit_share: { amount_minor: 100000, currency: 'NGN' }, billing_periods: ['monthly', 'quarterly', 'yearly'],
+      minimum_price: { amount_minor: 500000, currency: 'NGN' }, platform_share_percent: 30,
+      code_unit_share: { amount_minor: 150000, currency: 'NGN' }, billing_periods: ['monthly', 'quarterly', 'yearly'],
     });
   });
 
   it('an owner applies; one identity per person; nothing is public until approved', async () => {
     expect((await ctx.http().post('/v1/owner/applications').set(owner.auth).send(application({ price: { amount_minor: 400000, currency: 'NGN' } })).expect(422)).body.code).toBe('price_below_minimum');
     const res = await ctx.http().post('/v1/owner/applications').set(owner.auth).send(application()).expect(201);
-    expect(res.body).toMatchObject({ status: 'pending_review', invite_code: expect.stringMatching(/^LTH-\d{4}$/), platform_share_percent: 20, demo_tours_left: 2, verification: 'pending' });
+    expect(res.body).toMatchObject({ status: 'pending_review', invite_code: expect.stringMatching(/^LTH-\d{4}$/), platform_share_percent: 30, demo_tours_left: 2, verification: 'pending' });
     community = res.body;
 
     const other = await signIn(ctx);
@@ -121,9 +121,9 @@ describe('Communities and money', () => {
     expect(new Date(m.current_period_end).getTime() - Date.now()).toBeGreaterThan(36 * 86400_000);
 
     const lines = await q(`SELECT account, amount_kobo::int AS kobo FROM ledger_entries WHERE payment_id = $1 ORDER BY account::text`, [co.body.payment_id]);
-    expect(lines).toEqual([{ account: 'cash', kobo: 1_000_000 }, { account: 'owner_payable', kobo: -800_000 }, { account: 'platform_revenue', kobo: -200_000 }]);
+    expect(lines).toEqual([{ account: 'cash', kobo: 1_000_000 }, { account: 'owner_payable', kobo: -700_000 }, { account: 'platform_revenue', kobo: -300_000 }]);
     expect(await q(`SELECT * FROM ledger_unbalanced`)).toEqual([]);
-    expect((await q(`SELECT balance_kobo::int AS b FROM owner_balances WHERE community_id = $1`, [community.id]))[0].b).toBe(800_000);
+    expect((await q(`SELECT balance_kobo::int AS b FROM owner_balances WHERE community_id = $1`, [community.id]))[0].b).toBe(700_000);
   });
 
   it('owners see first names and progress, never contact details; nudges go through us', async () => {
@@ -190,16 +190,16 @@ describe('Communities and money', () => {
   it('Selar codes: prepaid share, created on payment, CSV for Selar, single use', async () => {
     await ctx.http().post(`/v1/owner/communities/${community.id}/code-batches`).set(owner.auth).set(idem()).send({ quantity: 3, accept_terms: false }).expect(400);
     const buy = await ctx.http().post(`/v1/owner/communities/${community.id}/code-batches`).set(owner.auth).set(idem()).send({ quantity: 3, accept_terms: true }).expect(201);
-    expect(buy.body.batch).toMatchObject({ quantity: 3, unit_share: { amount_minor: 200_000 }, total: { amount_minor: 600_000 }, paid: false, grants_period: 'monthly' });
+    expect(buy.body.batch).toMatchObject({ quantity: 3, unit_share: { amount_minor: 300_000 }, total: { amount_minor: 900_000 }, paid: false, grants_period: 'monthly' });
     expect((await ctx.http().get(`/v1/owner/code-batches/${buy.body.batch.id}/codes`).set(owner.auth).expect(402)).body.code).toBe('batch_unpaid');
 
-    await pay(buy.body.checkout.payment_id, 6000);
+    await pay(buy.body.checkout.payment_id, 9000);
     const csv = await ctx.http().get(`/v1/owner/code-batches/${buy.body.batch.id}/codes`).set(owner.auth).expect(200);
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
     codes = csv.text.trim().split('\n').slice(1).map((l) => l.split(',')[0]);
     expect(codes).toHaveLength(3);
     expect(codes[0]).toMatch(/^LTH-[A-Z2-9]{8}$/);
-    expect((await q(`SELECT account, amount_kobo::int AS kobo FROM ledger_entries WHERE payment_id = $1 ORDER BY account::text`, [buy.body.checkout.payment_id]))).toEqual([{ account: 'cash', kobo: 600_000 }, { account: 'platform_revenue', kobo: -600_000 }]);
+    expect((await q(`SELECT account, amount_kobo::int AS kobo FROM ledger_entries WHERE payment_id = $1 ORDER BY account::text`, [buy.body.checkout.payment_id]))).toEqual([{ account: 'cash', kobo: 900_000 }, { account: 'platform_revenue', kobo: -900_000 }]);
 
     const buyer = await signIn(ctx);
     expect((await ctx.http().get(`/v1/join/${codes[0]}`).expect(200)).body).toMatchObject({ kind: 'access_code', price: null });
@@ -238,20 +238,20 @@ describe('Communities and money', () => {
     const payouts = ctx.app.get(PayoutsService);
     expect(await payouts.createMonthly()).toEqual({ created: 0 }); // money is less than 7 days old
     const earn = (await ctx.http().get(`/v1/owner/communities/${community.id}/earnings`).set(owner.auth).expect(200)).body;
-    expect(earn).toMatchObject({ balance: { amount_minor: 800_000 }, on_hold: { amount_minor: 800_000 }, payouts: [] });
+    expect(earn).toMatchObject({ balance: { amount_minor: 700_000 }, on_hold: { amount_minor: 700_000 }, payouts: [] });
 
     await q(`UPDATE ledger_entries SET created_at = now() - interval '10 days' WHERE community_id = $1`, [community.id]);
     expect(await payouts.createMonthly()).toEqual({ created: 1 });
     expect(await payouts.createMonthly()).toEqual({ created: 0 }); // never twice
     const p = (await ctx.http().get('/v1/admin/payouts?status=ready').set(admin.auth).expect(200)).body.items.find((x: any) => x.community.id === community.id);
-    expect(p).toMatchObject({ amount: { amount_minor: 800_000 }, payee: { legal_name: 'Tunde Bakare', account_last4: '6789', identity_verified: true } });
+    expect(p).toMatchObject({ amount: { amount_minor: 700_000 }, payee: { legal_name: 'Tunde Bakare', account_last4: '6789', identity_verified: true } });
 
     await ctx.http().post(`/v1/admin/payouts/${p.id}/paid`).set(admin.auth).send({ reference: 'PAGA-123456' }).expect(409);
     expect((await ctx.http().post(`/v1/admin/payouts/${p.id}/release`).set(admin.auth).expect(202)).body.status).toBe('processing');
     await ctx.http().post(`/v1/admin/payouts/${p.id}/paid`).set(admin.auth).send({ reference: 'PAGA-123456' }).expect(200);
     expect((await q(`SELECT balance_kobo::int AS b FROM owner_balances WHERE community_id = $1`, [community.id]))[0].b).toBe(0);
     expect(await q(`SELECT * FROM ledger_unbalanced`)).toEqual([]);
-    expect((await ctx.http().get(`/v1/owner/communities/${community.id}/earnings`).set(owner.auth).expect(200)).body.payouts[0]).toMatchObject({ status: 'paid', amount: { amount_minor: 800_000 } });
+    expect((await ctx.http().get(`/v1/owner/communities/${community.id}/earnings`).set(owner.auth).expect(200)).body.payouts[0]).toMatchObject({ status: 'paid', amount: { amount_minor: 700_000 } });
   });
 
   it('demo payments: with fake Paga, the payer completes checkout on the web app\'s demo page', async () => {
@@ -262,7 +262,7 @@ describe('Communities and money', () => {
     expect((await ctx.http().post(`/v1/dev/demo-payments/${id}/complete`).set(m1.auth).expect(404)).body.code).toBe('payment_not_found');
     expect((await ctx.http().post(`/v1/dev/demo-payments/${id}/complete`).set(owner.auth).expect(200)).body).toMatchObject({ id, purpose: 'code_batch', status: 'succeeded' });
     await ctx.http().post(`/v1/dev/demo-payments/${id}/complete`).set(owner.auth).expect(200); // twice is safe
-    expect(await q(`SELECT account, amount_kobo::int AS kobo FROM ledger_entries WHERE payment_id = $1 ORDER BY account::text`, [id])).toEqual([{ account: 'cash', kobo: 200_000 }, { account: 'platform_revenue', kobo: -200_000 }]);
+    expect(await q(`SELECT account, amount_kobo::int AS kobo FROM ledger_entries WHERE payment_id = $1 ORDER BY account::text`, [id])).toEqual([{ account: 'cash', kobo: 300_000 }, { account: 'platform_revenue', kobo: -300_000 }]);
   });
 
   it('a ban voids unused codes; members keep access until their period ends, then get a switch offer', async () => {

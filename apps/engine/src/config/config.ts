@@ -75,8 +75,8 @@ const schema = z
 
     // Communities and money. Prices are set by owners; these are i-jobs' own rules.
     PUBLIC_API_URL: z.string().default('http://localhost:3000'),
-    /** i-jobs' share of each membership payment, in basis points (2000 = 20%). New communities only. */
-    PLATFORM_SHARE_BPS: z.coerce.number().int().min(0).max(10000).default(2000),
+    /** i-jobs' share of each membership payment, in basis points (3000 = 30%). New communities only. */
+    PLATFORM_SHARE_BPS: z.coerce.number().int().min(0).max(10000).default(3000),
     MINIMUM_PRICE_KOBO: z.coerce.number().int().positive().default(500000),
     TRIAL_DAYS: z.coerce.number().int().min(1).max(30).default(7),
     /** Days a member keeps access after a missed renewal. */
