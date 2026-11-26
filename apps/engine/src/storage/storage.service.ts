@@ -31,8 +31,14 @@ export class StorageService {
       config.STORAGE_DRIVER === 'r2'
         ? new S3Client({
             region: 'auto',
+            forcePathStyle: true, // https://<account>.r2.cloudflarestorage.com/<bucket>/<key>, R2's documented form
             endpoint: `https://${config.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
             credentials: { accessKeyId: config.R2_ACCESS_KEY_ID!, secretAccessKey: config.R2_SECRET_ACCESS_KEY! },
+            // Newer AWS SDKs put a checksum into every upload link by default: a checksum of the empty
+            // body at signing time. A browser then uploads the real file, the checksum can't match, and
+            // R2 refuses the upload. Only add checksums where an operation requires one.
+            requestChecksumCalculation: 'WHEN_REQUIRED',
+            responseChecksumValidation: 'WHEN_REQUIRED',
           })
         : null;
     this.dir = config.STORAGE_DRIVER === 'local' ? path.resolve(config.STORAGE_DIR) : null;

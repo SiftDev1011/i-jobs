@@ -1,6 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2';
+import { Problem } from '../common/problem';
 import { AppConfig, CONFIG } from '../config/config';
+
+/** SES errors that mean "this message was refused", not "SES is down". */
+const REFUSALS = new Set(['MessageRejected', 'MailFromDomainNotVerifiedException', 'AccountSuspendedException', 'SendingPausedException', 'LimitExceededException', 'TooManyRequestsException', 'BadRequestException']);
 
 export interface OutgoingMail {
   to: string;
@@ -53,8 +57,21 @@ export class MailService {
           },
         },
       }),
-    );
+    ).catch((e: unknown) => this.refused(e, mail.to));
     return out.MessageId;
+  }
+
+  /**
+   * SES refusing a message (most often, while the account is still in SES's sandbox: it only sends to
+   * verified addresses) becomes a clear 503 instead of a 500, and the log says exactly what SES said.
+   */
+  private refused(e: unknown, to: string): never {
+    const name = (e as { name?: string })?.name ?? '';
+    if (REFUSALS.has(name)) {
+      this.logger.warn(`SES refused an email to ${to.replace(/^(.).*@/, '$1…@')}: ${name}: ${(e as Error).message}`);
+      throw Problem.unavailable('email_not_sent', 'We couldn’t send an email to that address just now. Try again in a little while, or use a different address.');
+    }
+    throw e;
   }
 
   /** A ready-made MIME message (applications with a CV attached). Returns the SES message id. */
