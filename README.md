@@ -6,8 +6,9 @@ The job engine behind i-jobs by 99, Remote Hustle and School1.
 |---|---|---|
 | `db/` | PostgreSQL + pgvector schema, starter data, tests | 64 tables, 11 views, 19 rule checks passing |
 | `api/` | OpenAPI 3.1 spec and a browsable reference page | 109 endpoints + 3 webhooks, lint passing |
-| `apps/engine/` | The API and background worker (NestJS) | Milestones 1–6 done: sign-in, accounts, partner sites, 24 job sources, AI budget, job search, CV reading, profiles, matching, autopilot, apply queue, replies, visitors, communities, Paga, Selar codes, ledger, payouts, notifications, help and support, moderation, partner linking and webhooks, employers, data requests, optional texts, demo payments, payments-off mode, company logos, similar jobs; 215 tests passing |
+| `apps/engine/` | The API and background worker (NestJS) | Milestones 1–6 done: sign-in, accounts, partner sites, 24 job sources, AI budget, job search, CV reading, profiles, matching, autopilot, apply queue, replies, visitors, communities, Paga, Selar codes, ledger, payouts, notifications, help and support, moderation, partner linking and webhooks, employers, data requests, optional texts, demo payments, payments-off mode, company logos, similar jobs, partner kit; 225 tests passing |
 | `apps/web/` | The web app (Next.js): landing page, job search, member app, community owner dashboard, employer pages, staff tools | 52 pages; 10 unit tests and 45 browser tests passing |
+| `partner-kit/` | For Remote Hustle and School1: a one-file API client, Next.js examples and a setup guide | Tested against the engine |
 | `infra/` | Docker Compose for one Oracle ARM server, setup, backups, tunnel, Cloudflare email worker | Ready to deploy |
 | `.devcontainer/` | GitHub Codespaces setup: Node 22, Docker, psql, packages installed on first start | Ready |
 | `.github/workflows/` | CI: typecheck, engine tests on real Postgres + Redis, web build and browser tests, ARM image to GHCR | Ready |

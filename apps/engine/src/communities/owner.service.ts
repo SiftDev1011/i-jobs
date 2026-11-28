@@ -348,7 +348,17 @@ export class OwnerService {
       const payment = await trx.insertInto('payments').values({ user_id: userId, community_id: communityId, code_batch_id: batch.id, purpose: 'code_batch', amount_kobo: batch.total_kobo! }).returning(['id', 'amount_kobo']).executeTakeFirstOrThrow();
       return { batch, payment };
     });
-    const checkout = await this.startPayment(payment.id, Number(payment.amount_kobo), { name: owner.full_name ?? 'Community owner', email: owner.email, phone: owner.phone }, `${quantity} access codes for ${c.name}`);
+    let checkout;
+    try {
+      checkout = await this.startPayment(payment.id, Number(payment.amount_kobo), { name: owner.full_name ?? 'Community owner', email: owner.email, phone: owner.phone }, `${quantity} access codes for ${c.name}`);
+    } catch (e) {
+      // Paga said no: nothing was paid, so leave no unpaid batch behind.
+      await this.db.asEngine(async (trx) => {
+        await trx.deleteFrom('payments').where('id', '=', payment.id).where('status', '=', 'pending').execute();
+        await trx.deleteFrom('code_batches').where('id', '=', batch.id).where('payment_id', 'is', null).execute();
+      });
+      throw e;
+    }
     return { batch: await this.batchView(batch.id), checkout };
   }
 

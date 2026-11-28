@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { safeEqual } from '../common/crypto';
 import { Problem } from '../common/problem';
 import { AppConfig, CONFIG } from '../config/config';
@@ -43,12 +43,14 @@ export interface PagaCallback {
 }
 
 const sha512 = (s: string) => createHash('sha512').update(s, 'utf8').digest('hex');
-const naira = (kobo: number) => (kobo / 100).toFixed(2);
+/** Paga wants the amount as a JSON number of naira (9000, or 9000.5), and hashes it written the same way. */
+const naira = (kobo: number) => Math.round(kobo) / 100;
 
 @Injectable()
 export class PagaClient {
   /** Test hook: what the fake driver "sent". */
   readonly fakeRequests: PaymentRequest[] = [];
+  private readonly logger = new Logger('Paga');
 
   constructor(@Inject(CONFIG) private readonly config: AppConfig) {}
 
@@ -86,9 +88,15 @@ export class PagaClient {
       paymentMethods: ['REQUEST_MONEY', 'BANK_TRANSFER', 'FUNDING_USSD'],
     };
     const hash = sha512(
-      [body.referenceNumber, body.amount, body.currency, r.payer.phone ?? '', r.payer.email ?? '', '', '', '', '', this.config.PAGA_HASH_KEY].join(''),
+      [body.referenceNumber, String(body.amount), body.currency, r.payer.phone ?? '', r.payer.email ?? '', '', '', '', '', this.config.PAGA_HASH_KEY].join(''),
     );
-    const res = await fetch(`${this.config.PAGA_BASE_URL}/paymentRequest`, {
+    const failed = (why: string) => {
+      this.logger.error(`Paga payment request ${r.reference} failed: ${why}`);
+      return Problem.unavailable('payment_provider_error', 'Paga didn’t accept the payment just now. Try again in a few minutes.');
+    };
+    let res: Response;
+    try {
+      res = await fetch(`${this.config.PAGA_BASE_URL}/paymentRequest`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -97,11 +105,17 @@ export class PagaClient {
         hash,
       },
       body: JSON.stringify(body),
-    });
-    const json = (await res.json().catch(() => ({}))) as any;
-    if (!res.ok || String(json.statusCode) !== '0') throw new Error(`Paga payment request failed: ${res.status} ${json.statusCode ?? ''} ${json.statusMessage ?? ''}`.trim());
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (e) {
+      throw failed(`no answer (${(e as Error).message})`);
+    }
+    const text = await res.text().catch(() => '');
+    let json: any = {};
+    try { json = JSON.parse(text); } catch { /* not JSON: logged below */ }
+    if (!res.ok || String(json.statusCode) !== '0') throw failed(`HTTP ${res.status}: ${text.slice(0, 500)}`);
     const link = (json.paymentMethods ?? []).find((m: any) => m.name === 'REQUEST_MONEY')?.properties?.WebPaymentLink;
-    if (!link) throw new Error('Paga did not return a payment link');
+    if (!link) throw failed(`no payment link in the answer: ${text.slice(0, 500)}`);
     return { checkoutUrl: link, providerRef: String(json.referenceNumber ?? r.reference), raw: json };
   }
 

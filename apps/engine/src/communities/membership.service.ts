@@ -153,7 +153,12 @@ export class MembershipService {
     const payment = await this.db.asEngine((trx) =>
       trx.insertInto('payments').values({ user_id: userId, community_id: m.community_id, membership_id: membershipId, purpose: 'membership', amount_kobo: m.price_kobo }).returning(['id', 'amount_kobo']).executeTakeFirstOrThrow(),
     );
-    return this.owners.startPayment(payment.id, Number(payment.amount_kobo), { name: user.full_name ?? 'i-jobs member', email: user.email, phone: user.phone }, `${m.community_name} membership`);
+    try {
+      return await this.owners.startPayment(payment.id, Number(payment.amount_kobo), { name: user.full_name ?? 'i-jobs member', email: user.email, phone: user.phone }, `${m.community_name} membership`);
+    } catch (e) {
+      await this.db.asEngine((trx) => trx.updateTable('payments').set({ status: 'failed', failure_reason: 'Paga did not accept the payment request' }).where('id', '=', payment.id).where('status', '=', 'pending').execute());
+      throw e;
+    }
   }
 
   /** Paga's callback. Idempotent: only a pending payment can succeed, once. */

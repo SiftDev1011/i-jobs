@@ -23,7 +23,7 @@ role if missing, applies every migration and seed, and sets known site keys for 
 School1 (`env.ts`). The app connects as `ijobs_app`, exactly as in production, so row-level security
 is really tested.
 
-## What's covered (215 tests)
+## What's covered (225 tests)
 
 - **Sign-in:** email and phone codes; wrong code; lock after five tries; codes work once; rate limits
   with `Retry-After`; field-by-field validation; refresh rotation; reuse of an old refresh token ends
@@ -64,6 +64,11 @@ is really tested.
   balance, owners seeing first names only, nudges, approval and decline, bulk invites, Selar code
   batches (prepaid, CSV, single use), pasted jobs held until the owner confirms, payouts (hold,
   release, paid, balanced ledger), bans (codes voided, access to period end, switch offer), fraud checks.
+- **Partner kit:** `partner-kit/ijobs.ts` run against the engine over HTTP: wrong keys, linking new and
+  existing people, acting for a user, School1 parent approval, jobs, trainings, webhooks, signature checks.
+- **Paga requests (real driver, Paga stood in for):** the amount sent as a number of naira, the
+  hash and Basic login as Paga checks them; a refused request gives a clear "try again" and leaves no
+  unpaid batch or pending payment behind.
 - **Storage (local driver):** signed upload links tied to one key, type and size; files on disk; no path escapes.
 - **Platform:** private-address blocking and DNS re-checks, webhook signatures, event ids and backoff,
   sealed secrets; notifications (partner sees its own only, read marks, paging, emailed once); help
