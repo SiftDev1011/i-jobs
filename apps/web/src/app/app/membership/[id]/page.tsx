@@ -9,8 +9,15 @@ import { TrialForm } from './trial-form';
 
 export const metadata: Metadata = { title: 'Your membership' };
 
-export default async function MembershipPage({ params }: { params: Promise<{ id: string }> }) {
+const PAY_ERRORS: Record<string, string> = {
+  provider: 'Paga didn’t accept the payment just now. Nothing was charged. Try again in a few minutes.',
+  failed: 'We couldn’t start the payment. Nothing was charged. Try again in a minute.',
+};
+
+export default async function MembershipPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ pay?: string }> }) {
   const { id } = await params;
+  const payError = PAY_ERRORS[(await searchParams).pay ?? ''];
+  const payNote = payError ? <p className={`${u.notice} ${u.bad}`} role="alert">{payError}</p> : null;
   const me = (await currentUser())!;
   const api = await engine();
   const m = must(await api.GET('/me/memberships')).find((x) => x.id === id);
@@ -34,6 +41,7 @@ export default async function MembershipPage({ params }: { params: Promise<{ id:
       <main className={u.page}>
         <h1 className={u.h1}>{m.community.name}</h1>
         <p className={`${u.notice} ${u.good}`}>You&rsquo;re in{m.status === 'trialing' ? ' on your free week' : ''}{m.current_period_end ? ` until ${new Date(m.current_period_end).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos',  day: 'numeric', month: 'long' })}` : ''}.</p>
+        {m.status === 'trialing' && payNote}
         {m.status === 'trialing' && payments && (
           <form action={startCheckout}><input type="hidden" name="membership" value={m.id} /><button className="btn btn-green">Pay now{price ? ` (${price})` : ''}</button></form>
         )}
@@ -51,6 +59,7 @@ export default async function MembershipPage({ params }: { params: Promise<{ id:
       <div className={u.grid2}>
         <section className={u.card}>
           <h2 className={u.h2}>Pay your membership</h2>
+          {payNote}
           <p className={u.muted}>{price ? `${price} a month, paid securely through Paga (card, transfer or USSD).` : 'Paid securely through Paga (card, transfer or USSD).'}</p>
           {payments ? <form action={startCheckout}><input type="hidden" name="membership" value={m.id} /><button className="btn btn-green btn-block">Pay{price ? ` ${price}` : ''}</button></form> : soon}
         </section>

@@ -35,8 +35,10 @@ export async function startCheckout(form: FormData): Promise<void> {
   const r = await api.POST('/memberships/{membershipId}/checkout', {
     params: { path: { membershipId: id }, header: { 'Idempotency-Key': randomUUID() } },
   });
+  const code = (r.error as { code?: string } | undefined)?.code;
   // Payments switched off since the page loaded: back to the page, which now says so.
-  if ((r.error as { code?: string } | undefined)?.code === 'payments_off') redirect(`/app/membership/${id}`);
-  const c = must(r);
-  redirect(c.checkout_url);
+  if (code === 'payments_off') redirect(`/app/membership/${id}`);
+  // Paga (or anything else) said no: back to the page with a message, never an error screen.
+  if (r.error || !r.data?.checkout_url) redirect(`/app/membership/${id}?pay=${code === 'payment_provider_error' ? 'provider' : 'failed'}`);
+  redirect(r.data.checkout_url);
 }
